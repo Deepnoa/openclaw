@@ -1,4 +1,4 @@
-import OpenClawDiscovery
+@testable import OpenClawDiscovery
 import Testing
 
 @Suite
@@ -120,5 +120,51 @@ struct GatewayDiscoveryModelTests {
             user: "peter",
             host: "studio.local",
             port: 2201) == "peter@studio.local:2201")
+    }
+
+    @Test func dedupeKeyPrefersResolvedEndpointAcrossSources() {
+        let wideArea = GatewayDiscoveryModel.DiscoveredGateway(
+            displayName: "Gateway",
+            serviceHost: "gutsy-home.tail06a72.ts.net",
+            servicePort: 443,
+            lanHost: nil,
+            tailnetDns: "gutsy-home.tail06a72.ts.net",
+            sshPort: 22,
+            gatewayPort: 443,
+            cliPath: nil,
+            stableID: "wide-area|openclaw.internal.|gutsy-home",
+            debugID: "wide-area",
+            isLocal: false)
+        let serve = GatewayDiscoveryModel.DiscoveredGateway(
+            displayName: "Gateway",
+            serviceHost: "gutsy-home.tail06a72.ts.net",
+            servicePort: 443,
+            lanHost: nil,
+            tailnetDns: "gutsy-home.tail06a72.ts.net",
+            sshPort: 22,
+            gatewayPort: 443,
+            cliPath: nil,
+            stableID: "tailscale-serve|gutsy-home.tail06a72.ts.net",
+            debugID: "serve",
+            isLocal: false)
+
+        #expect(GatewayDiscoveryModel.dedupeKey(for: wideArea) == GatewayDiscoveryModel.dedupeKey(for: serve))
+    }
+
+    @Test func dedupeKeyFallsBackToStableIDWithoutEndpoint() {
+        let unresolved = GatewayDiscoveryModel.DiscoveredGateway(
+            displayName: "Gateway",
+            serviceHost: nil,
+            servicePort: nil,
+            lanHost: nil,
+            tailnetDns: "gutsy-home.tail06a72.ts.net",
+            sshPort: 22,
+            gatewayPort: nil,
+            cliPath: nil,
+            stableID: "tailscale-serve|gutsy-home.tail06a72.ts.net",
+            debugID: "serve",
+            isLocal: false)
+
+        #expect(GatewayDiscoveryModel.dedupeKey(for: unresolved) == "stable|tailscale-serve|gutsy-home.tail06a72.ts.net")
     }
 }

@@ -14,11 +14,11 @@ enum TailscaleServeGatewayDiscovery {
     private static let defaultProbeTimeoutSeconds: TimeInterval = 1.6
 
     struct DiscoveryContext: Sendable {
-        var tailscaleStatus: @Sendable () -> String?
+        var tailscaleStatus: @Sendable () async -> String?
         var probeHost: @Sendable (_ host: String, _ timeout: TimeInterval) async -> Bool
 
         static let live = DiscoveryContext(
-            tailscaleStatus: { readTailscaleStatus() },
+            tailscaleStatus: { await readTailscaleStatus() },
             probeHost: { host, timeout in
                 await probeHostForGatewayChallenge(host: host, timeout: timeout)
             })
@@ -29,7 +29,7 @@ enum TailscaleServeGatewayDiscovery {
         context: DiscoveryContext = .live) async -> [TailscaleServeGatewayBeacon]
     {
         guard timeoutSeconds > 0 else { return [] }
-        guard let statusJson = context.tailscaleStatus(),
+        guard let statusJson = await context.tailscaleStatus(),
               let status = parseStatus(statusJson)
         else {
             return []
@@ -144,7 +144,7 @@ enum TailscaleServeGatewayDiscovery {
         return lower.isEmpty ? nil : lower
     }
 
-    private static func readTailscaleStatus() -> String? {
+    private static func readTailscaleStatus() async -> String? {
         let candidates = [
             "/usr/local/bin/tailscale",
             "/opt/homebrew/bin/tailscale",
@@ -153,7 +153,8 @@ enum TailscaleServeGatewayDiscovery {
         ]
 
         for candidate in candidates {
-            if let stdout = self.run(path: candidate, args: ["status", "--json"], timeout: 1.0) {
+            guard let executable = self.resolveExecutablePath(candidate) else { continue }
+            if let stdout = await self.run(path: executable, args: ["status", "--json"], timeout: 1.0) {
                 return stdout
             }
         }
@@ -161,7 +162,44 @@ enum TailscaleServeGatewayDiscovery {
         return nil
     }
 
-    private static func run(path: String, args: [String], timeout: TimeInterval) -> String? {
+    static func resolveExecutablePath(
+        _ candidate: String,
+        env: [String: String] = ProcessInfo.processInfo.environment) -> String?
+    {
+        let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let fileManager = FileManager.default
+        let hasPathSeparator = trimmed.contains("/")
+        if hasPathSeparator {
+            return fileManager.isExecutableFile(atPath: trimmed) ? trimmed : nil
+        }
+
+        let pathRaw = env["PATH"] ?? ""
+        let entries = pathRaw.split(separator: ":").map(String.init)
+        for entry in entries {
+            let dir = entry.trimmingCharacters(in: .whitespacesAndNewlines)
+            if dir.isEmpty { continue }
+            let fullPath = URL(fileURLWithPath: dir)
+                .appendingPathComponent(trimmed)
+                .path
+            if fileManager.isExecutableFile(atPath: fullPath) {
+                return fullPath
+            }
+        }
+
+        return nil
+    }
+
+    private static func run(path: String, args: [String], timeout: TimeInterval) async -> String? {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                continuation.resume(returning: self.runBlocking(path: path, args: args, timeout: timeout))
+            }
+        }
+    }
+
+    private static func runBlocking(path: String, args: [String], timeout: TimeInterval) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: path)
         process.arguments = args

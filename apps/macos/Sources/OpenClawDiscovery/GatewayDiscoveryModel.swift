@@ -374,11 +374,25 @@ public final class GatewayDiscoveryModel {
         return gateways.contains(where: { !$0.isLocal })
     }
 
+    static func dedupeKey(for gateway: DiscoveredGateway) -> String {
+        if let host = gateway.serviceHost?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased(),
+           !host.isEmpty,
+           let port = gateway.servicePort,
+           port > 0
+        {
+            return "endpoint|\(host):\(port)"
+        }
+        return "stable|\(gateway.stableID)"
+    }
+
     private func sortedDeduped(gateways: [DiscoveredGateway]) -> [DiscoveredGateway] {
         var seen = Set<String>()
         let deduped = gateways.filter { gateway in
-            if seen.contains(gateway.stableID) { return false }
-            seen.insert(gateway.stableID)
+            let key = Self.dedupeKey(for: gateway)
+            if seen.contains(key) { return false }
+            seen.insert(key)
             return true
         }
         return deduped.sorted {

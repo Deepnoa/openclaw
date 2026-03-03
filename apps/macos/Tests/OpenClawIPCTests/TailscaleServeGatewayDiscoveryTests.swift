@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import OpenClawDiscovery
 
@@ -52,5 +53,25 @@ struct TailscaleServeGatewayDiscoveryTests {
 
         let beacons = await TailscaleServeGatewayDiscovery.discover(timeoutSeconds: 2.0, context: context)
         #expect(beacons.isEmpty)
+    }
+
+    @Test func resolvesBareExecutableFromPATH() throws {
+        let tempDir = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: tempDir) }
+
+        let executable = tempDir.appendingPathComponent("tailscale")
+        try "#!/bin/sh\necho ok\n".write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+        let env: [String: String] = ["PATH": tempDir.path]
+        let resolved = TailscaleServeGatewayDiscovery.resolveExecutablePath("tailscale", env: env)
+        #expect(resolved == executable.path)
+    }
+
+    @Test func rejectsMissingExecutableCandidate() {
+        #expect(TailscaleServeGatewayDiscovery.resolveExecutablePath("", env: [:]) == nil)
+        #expect(TailscaleServeGatewayDiscovery.resolveExecutablePath("definitely-not-here", env: ["PATH": "/tmp"]) == nil)
     }
 }
