@@ -1136,7 +1136,7 @@ Current release checkpoint:
 
 - `main` Docker Release is expected to publish a runnable multi-arch image
 - the minimum smoke check is:
-  - `docker run --rm ghcr.io/deepnoa/openclaw:main openclaw --version`
+  - `docker run --rm ghcr.io/<lowercased github.repository>:main openclaw --version`
 
 The runtime entrypoint now also emits a lightweight feedback layer for the next turn:
 
