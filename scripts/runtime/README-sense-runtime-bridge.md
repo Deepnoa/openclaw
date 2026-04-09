@@ -1108,6 +1108,36 @@ The current minimal read-only run set also includes:
 - `run summary`
   - thin summary view over existing `digest` + `failures`
 
+## Operational Notes
+
+Current milestone summary:
+
+- the minimum NemoClaw Control via Slack surface now includes:
+  - `/nemoclaw help`
+  - `/nemoclaw digest`
+  - `/nemoclaw recent`
+  - `/nemoclaw failures`
+  - `/nemoclaw job <id>`
+  - `/nemoclaw gpu`
+  - `/nemoclaw run <task>`
+- `job_done`, `job_failed`, and `digest_ready` are the currently wired completion-path Slack events
+- the shared Slack formatting path still starts at `notification_digest_summary[*].digest_bucket_ui_layouts.meta.summary_parts`
+
+Docker Release notes:
+
+- GHCR tags must use a lowercase repository path
+  - use a lowercased form of `${{ github.repository }}` when building `ghcr.io/...` tags
+- the Docker image version comes from the root `package.json` version
+  - `openclaw --version` inside the published image should match that root package version
+- the Docker build currently runs `CI=true pnpm prune --prod` in the runtime-assets stage
+  - if a package dependency changes, `pnpm-lock.yaml` must stay in sync or Docker Release will fail with `ERR_PNPM_OUTDATED_LOCKFILE`
+
+Current release checkpoint:
+
+- `main` Docker Release is expected to publish a runnable multi-arch image
+- the minimum smoke check is:
+  - `docker run --rm ghcr.io/deepnoa/openclaw:main openclaw --version`
+
 The runtime entrypoint now also emits a lightweight feedback layer for the next turn:
 
 - `feedback_summary`
