@@ -41,6 +41,19 @@
 - If claim is unsubstantiated or likely hallucinated/BS: do not merge. Request evidence/changes, or close with `invalid` when appropriate.
 - If linked issue appears wrong/outdated, correct triage first; do not merge speculative fixes.
 
+## Codex PR workflow
+
+- For Codex-driven work, prefer using a PR for any change that is intended to land on `main`.
+- Good PR candidates include behavior changes, CI/release changes, Docker changes, auth/runtime changes, Slack/NemoClaw integrations, docs that capture new operating rules, and any change that spans multiple files.
+- Local experiments, scratch notes, and throwaway probes do not need a PR if they are not intended to land on `main`.
+- Prefer `1 PR = 1 intent` so Codex review stays focused and easy to act on.
+- When using GitHub review, the simplest path is:
+  - create branch
+  - commit and push
+  - open PR
+  - trigger Codex review with `@codex review` when needed
+  - address follow-up with `@codex address that feedback` or a direct fix commit
+
 ## Project Structure & Module Organization
 
 - Source code: `src/` (CLI wiring in `src/cli`, commands in `src/commands`, web provider in `src/provider-web.ts`, infra in `src/infra`, media pipeline in `src/media`).
