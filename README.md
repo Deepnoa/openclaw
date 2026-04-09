@@ -181,6 +181,7 @@ Run `openclaw doctor` to surface risky/misconfigured DM policies.
 - [Tailscale Serve/Funnel](https://docs.openclaw.ai/gateway/tailscale) or [SSH tunnels](https://docs.openclaw.ai/gateway/remote) with token/password auth.
 - [Nix mode](https://docs.openclaw.ai/install/nix) for declarative config; [Docker](https://docs.openclaw.ai/install/docker)-based installs.
 - [Doctor](https://docs.openclaw.ai/gateway/doctor) migrations, [logging](https://docs.openclaw.ai/logging).
+- Docker smoke check example: `docker run --rm ghcr.io/deepnoa/openclaw:main openclaw --version`
 
 ## How it works (short)
 
