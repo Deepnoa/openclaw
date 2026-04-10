@@ -14,6 +14,8 @@
 #   Slim (bookworm-slim):    docker build --build-arg OPENCLAW_VARIANT=slim .
 ARG OPENCLAW_EXTENSIONS=""
 ARG OPENCLAW_VARIANT=default
+ARG OPENCLAW_BUNDLED_PLUGIN_DIR=extensions
+ARG OPENCLAW_DOCKER_APT_UPGRADE=1
 ARG OPENCLAW_NODE_BOOKWORM_IMAGE="node:24-bookworm@sha256:3a09aa6354567619221ef6c45a5051b671f953f0a1924d1f819ffb236e520e6b"
 ARG OPENCLAW_NODE_BOOKWORM_DIGEST="sha256:3a09aa6354567619221ef6c45a5051b671f953f0a1924d1f819ffb236e520e6b"
 ARG OPENCLAW_NODE_BOOKWORM_SLIM_IMAGE="node:24-bookworm-slim@sha256:e8e2e91b1378f83c5b2dd15f0247f34110e2fe895f6ca7719dbb780f929368eb"
@@ -26,18 +28,20 @@ ARG OPENCLAW_NODE_BOOKWORM_SLIM_DIGEST="sha256:e8e2e91b1378f83c5b2dd15f0247f3411
 
 FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE} AS ext-deps
 ARG OPENCLAW_EXTENSIONS
-COPY extensions /tmp/extensions
+ARG OPENCLAW_BUNDLED_PLUGIN_DIR
+COPY ${OPENCLAW_BUNDLED_PLUGIN_DIR} /tmp/${OPENCLAW_BUNDLED_PLUGIN_DIR}
 # Copy package.json for opted-in extensions so pnpm resolves their deps.
 RUN mkdir -p /out && \
     for ext in $OPENCLAW_EXTENSIONS; do \
-      if [ -f "/tmp/extensions/$ext/package.json" ]; then \
+      if [ -f "/tmp/${OPENCLAW_BUNDLED_PLUGIN_DIR}/$ext/package.json" ]; then \
         mkdir -p "/out/$ext" && \
-        cp "/tmp/extensions/$ext/package.json" "/out/$ext/package.json"; \
+        cp "/tmp/${OPENCLAW_BUNDLED_PLUGIN_DIR}/$ext/package.json" "/out/$ext/package.json"; \
       fi; \
     done
 
 # ── Stage 2: Build ──────────────────────────────────────────────
 FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE} AS build
+ARG OPENCLAW_BUNDLED_PLUGIN_DIR
 
 # Install Bun (required for build scripts). Retry the whole bootstrap flow to
 # tolerate transient 5xx failures from bun.sh/GitHub during CI image builds.
@@ -58,10 +62,11 @@ RUN corepack enable
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY openclaw.mjs ./
 COPY ui/package.json ./ui/package.json
 COPY patches ./patches
 
-COPY --from=ext-deps /out/ ./extensions/
+COPY --from=ext-deps /out/ ./${OPENCLAW_BUNDLED_PLUGIN_DIR}/
 
 # Reduce OOM risk on low-memory hosts during dependency installation.
 # Docker builds on small VMs may otherwise fail with "Killed" (exit 137).
@@ -72,7 +77,7 @@ COPY . .
 
 # Normalize extension paths now so runtime COPY preserves safe modes
 # without adding a second full extensions layer.
-RUN for dir in /app/extensions /app/.agent /app/.agents; do \
+RUN for dir in /app/${OPENCLAW_BUNDLED_PLUGIN_DIR} /app/.agent /app/.agents; do \
       if [ -d "$dir" ]; then \
         find "$dir" -type d -exec chmod 755 {} +; \
         find "$dir" -type f -exec chmod 644 {} +; \
@@ -96,7 +101,19 @@ RUN pnpm ui:build
 # Prune dev dependencies and strip build-only metadata before copying
 # runtime assets into the final image.
 FROM build AS runtime-assets
-RUN CI=true pnpm prune --prod && \
+ARG OPENCLAW_EXTENSIONS
+ARG OPENCLAW_BUNDLED_PLUGIN_DIR
+# Keep the install layer frozen, but allow prune to run against the copied
+# workspace tree subset used during `pnpm install`. The build stage only copied
+# the root, `ui`, and opted-in plugin manifests into the install layer, so
+# prune must not rediscover unrelated workspaces from the later full source
+# copy.
+RUN printf 'packages:\n  - .\n  - ui\n' > /tmp/pnpm-workspace.runtime.yaml && \
+    for ext in $OPENCLAW_EXTENSIONS; do \
+      printf '  - %s/%s\n' "$OPENCLAW_BUNDLED_PLUGIN_DIR" "$ext" >> /tmp/pnpm-workspace.runtime.yaml; \
+    done && \
+    cp /tmp/pnpm-workspace.runtime.yaml pnpm-workspace.yaml && \
+    CI=true NPM_CONFIG_FROZEN_LOCKFILE=false pnpm prune --prod && \
     find dist -type f \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.map' \) -delete
 
 # ── Runtime base images ─────────────────────────────────────────
@@ -113,6 +130,8 @@ LABEL org.opencontainers.image.base.name="docker.io/library/node:24-bookworm-sli
 # ── Stage 3: Runtime ────────────────────────────────────────────
 FROM base-${OPENCLAW_VARIANT}
 ARG OPENCLAW_VARIANT
+ARG OPENCLAW_BUNDLED_PLUGIN_DIR
+ARG OPENCLAW_DOCKER_APT_UPGRADE
 
 # OCI base-image metadata for downstream image consumers.
 # If you change these annotations, also update:
@@ -132,7 +151,9 @@ WORKDIR /app
 RUN --mount=type=cache,id=openclaw-bookworm-apt-cache,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=openclaw-bookworm-apt-lists,target=/var/lib/apt,sharing=locked \
     apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends && \
+    if [ "${OPENCLAW_DOCKER_APT_UPGRADE}" != "0" ]; then \
+      DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends; \
+    fi && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       procps hostname curl git lsof openssl
 
@@ -142,7 +163,7 @@ COPY --from=runtime-assets --chown=node:node /app/dist ./dist
 COPY --from=runtime-assets --chown=node:node /app/node_modules ./node_modules
 COPY --from=runtime-assets --chown=node:node /app/package.json .
 COPY --from=runtime-assets --chown=node:node /app/openclaw.mjs .
-COPY --from=runtime-assets --chown=node:node /app/extensions ./extensions
+COPY --from=runtime-assets --chown=node:node /app/${OPENCLAW_BUNDLED_PLUGIN_DIR} ./${OPENCLAW_BUNDLED_PLUGIN_DIR}
 COPY --from=runtime-assets --chown=node:node /app/skills ./skills
 COPY --from=runtime-assets --chown=node:node /app/docs ./docs
 
