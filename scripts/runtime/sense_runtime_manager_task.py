@@ -119,7 +119,7 @@ def main() -> int:
         'input': args.input,
         'params': params,
     }
-    print(json.dumps(normalized, ensure_ascii=False, indent=2))
+    print(json.dumps(normalized, ensure_ascii=False))
     if isinstance(result, dict) and int(result.get('exit_code', 0)) != 0:
         return 1
     return 0
