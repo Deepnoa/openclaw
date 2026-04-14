@@ -23,18 +23,22 @@ type RunCommandParseResult =
       text: string;
     }
   | {
-      kind: "queue";
+      kind: "pending";
       rawText: string;
       runKind: RunKind;
       normalizedTask: string;
       params: Record<string, unknown>;
     };
 
-function deriveChannelId(ctx: PluginCommandContext): string | null {
-  const candidate =
-    (typeof ctx.to === "string" && ctx.to.trim()) ||
-    (typeof ctx.from === "string" && ctx.from.trim()) ||
-    "";
+type BuildQueuedRunRecordResult =
+  | Extract<RunCommandParseResult, { kind: "help" | "error" }>
+  | {
+      kind: "queued";
+      record: RunRecord;
+    };
+
+function deriveChannelId(ctx: Pick<PluginCommandContext, "to">): string | null {
+  const candidate = typeof ctx.to === "string" ? ctx.to.trim() : "";
   return candidate || null;
 }
 
@@ -53,7 +57,7 @@ function classifyRunCommand(args: string | undefined): RunCommandParseResult {
   const normalized = trimmed.toLowerCase();
   if (normalized === "health") {
     return {
-      kind: "queue",
+      kind: "pending",
       rawText: trimmed,
       runKind: "health",
       normalizedTask: "health",
@@ -62,7 +66,7 @@ function classifyRunCommand(args: string | undefined): RunCommandParseResult {
   }
   if (normalized === "digest") {
     return {
-      kind: "queue",
+      kind: "pending",
       rawText: trimmed,
       runKind: "digest",
       normalizedTask: "digest",
@@ -77,7 +81,7 @@ function classifyRunCommand(args: string | undefined): RunCommandParseResult {
   }
 
   return {
-    kind: "queue",
+    kind: "pending",
     rawText: trimmed,
     runKind: "free",
     normalizedTask: trimmed,
@@ -90,9 +94,9 @@ export function buildQueuedRunRecord(params: {
   ctx: Pick<PluginCommandContext, "senderId" | "from" | "to">;
   now?: Date;
   runId?: string;
-}): RunCommandParseResult | { kind: "queue"; record: RunRecord } {
+}): BuildQueuedRunRecordResult {
   const parsed = classifyRunCommand(params.args);
-  if (parsed.kind !== "queue") {
+  if (parsed.kind !== "pending") {
     return parsed;
   }
 
@@ -105,7 +109,7 @@ export function buildQueuedRunRecord(params: {
     typeof params.ctx.from === "string" && params.ctx.from.trim() ? params.ctx.from.trim() : null;
 
   return {
-    kind: "queue",
+    kind: "queued",
     record: {
       run_id: runId,
       requested_by: requestedBy,
@@ -143,7 +147,7 @@ export async function handleRunCommand(
     now: deps.now?.(),
   });
 
-  if (built.kind === "help" || built.kind === "error") {
+  if (built.kind !== "queued") {
     return { text: built.text };
   }
 

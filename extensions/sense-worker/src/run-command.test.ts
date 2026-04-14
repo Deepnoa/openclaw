@@ -53,7 +53,7 @@ describe("run-command", () => {
       runId: "run_20260414_143022_a3f",
     });
     expect(built).toMatchObject({
-      kind: "queue",
+      kind: "queued",
       record: {
         run_id: "run_20260414_143022_a3f",
         kind: "health",
@@ -105,11 +105,30 @@ describe("run-command", () => {
       runId: "run_20260414_143022_a3f",
     });
     expect(built).toMatchObject({
-      kind: "queue",
+      kind: "queued",
       record: {
         kind: "free",
         raw_text: "NAS backup status を確認して",
         normalized_task: "NAS backup status を確認して",
+      },
+    });
+  });
+
+  it("uses only ctx.to for channel_id and falls back to null", () => {
+    const built = buildQueuedRunRecord({
+      args: "health",
+      ctx: {
+        senderId: "U123456789",
+        from: "taro",
+        to: "   ",
+      },
+      now: new Date("2026-04-14T14:30:22.000Z"),
+      runId: "run_20260414_143022_a3f",
+    });
+    expect(built).toMatchObject({
+      kind: "queued",
+      record: {
+        channel_id: null,
       },
     });
   });
