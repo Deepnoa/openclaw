@@ -111,7 +111,6 @@ describe("run-command", () => {
       kind: "health",
     });
   });
-
   it("queues free-text work as kind=free", () => {
     const built = buildQueuedRunRecord({
       args: "NAS backup status を確認して",
