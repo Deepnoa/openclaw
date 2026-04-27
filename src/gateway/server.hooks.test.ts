@@ -1,4 +1,5 @@
 import fs from "node:fs/promises";
+import { createServer as createHttpServer } from "node:http";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { resolveMainSessionKeyFromConfig } from "../config/sessions.js";
 import { drainSystemEvents, peekSystemEvents } from "../infra/system-events.js";
@@ -324,6 +325,91 @@ describe("gateway server hooks", () => {
       const multipartJson = (await multipartRes.json()) as { event?: { category?: string } };
       expect(multipartJson.event?.category).toBe("sales");
     });
+  });
+
+  test("syncs a public-safe Formspree intake marker to Office UI", async () => {
+    testState.hooksConfig = {
+      enabled: true,
+      token: HOOK_TOKEN,
+      allowedAgentIds: ["ops", "main"],
+      defaultSessionKey: "hook:visitor-intake",
+      allowedSessionKeyPrefixes: ["hook:"],
+    };
+    testState.agentsConfig = {
+      list: [{ id: "main", default: true }, { id: "ops" }],
+    };
+
+    let capturedBody = "";
+    const sink = createHttpServer((req, res) => {
+      let body = "";
+      req.setEncoding("utf8");
+      req.on("data", (chunk) => {
+        body += chunk;
+      });
+      req.on("end", () => {
+        capturedBody = body;
+        res.statusCode = 200;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({ ok: true }));
+      });
+    });
+
+    const previousUrl = process.env.OFFICE_UI_INTAKE_URL;
+    await new Promise<void>((resolve) => sink.listen(0, "127.0.0.1", () => resolve()));
+    const address = sink.address();
+    if (!address || typeof address === "string") {
+      throw new Error("expected TCP listener address");
+    }
+    process.env.OFFICE_UI_INTAKE_URL = `http://127.0.0.1:${address.port}/gateway/intake`;
+
+    try {
+      await withGatewayServer(async ({ port }) => {
+        mockIsolatedRunOk();
+        const response = await fetch(`http://127.0.0.1:${port}/hooks/formspree`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email: "person@example.com",
+            company: "Deepnoa",
+            phone: "03-0000-0000",
+            service: "AI Agent導入支援",
+            subject: "資料請求",
+            message: "資料をお願いします",
+          }),
+        });
+        expect(response.status).toBe(200);
+      });
+    } finally {
+      await new Promise<void>((resolve, reject) =>
+        sink.close((error) => (error ? reject(error) : resolve())),
+      );
+      if (previousUrl === undefined) {
+        delete process.env.OFFICE_UI_INTAKE_URL;
+      } else {
+        process.env.OFFICE_UI_INTAKE_URL = previousUrl;
+      }
+    }
+
+    expect(capturedBody).toBeTruthy();
+    const payload = JSON.parse(capturedBody) as Record<string, unknown>;
+    expect(payload.type).toBe("visitor.inquiry.detected");
+    expect(payload.source).toBe("formspree");
+    expect(payload.category).toBe("document_request");
+    expect(payload.service).toBe("AI Agent導入支援");
+    expect(payload.has_email).toBe(true);
+    expect(payload.has_company).toBe(true);
+    expect(payload.has_phone).toBe(true);
+    expect(payload.has_message).toBe(true);
+    expect(payload.summary).toBe("Formspree inquiry detected");
+    expect(payload.raw_details_hidden).toBe(true);
+    expect(payload.name).toBe("Formspree intake");
+    const safeMessage = typeof payload.message === "string" ? payload.message : "";
+    expect(safeMessage).toContain("raw_details_hidden=true");
+    expect(safeMessage).not.toContain("person@example.com");
+    expect(safeMessage).not.toContain("03-0000-0000");
+    expect(safeMessage).not.toContain("資料をお願いします");
+    expect(payload).not.toHaveProperty("email");
+    expect(payload).not.toHaveProperty("phone");
   });
 
   test("rejects request sessionKey unless hooks.allowRequestSessionKey is enabled", async () => {

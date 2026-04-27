@@ -35,6 +35,7 @@ import {
 } from "./control-ui.js";
 import { applyHookMappings } from "./hooks-mapping.js";
 import {
+  buildOfficeUiIntakePayload,
   extractHookToken,
   getHookAgentPolicyError,
   getHookChannelError,
@@ -118,6 +119,47 @@ const GATEWAY_PROBE_STATUS_BY_PATH = new Map<string, "live" | "ready">([
   ["/readyz", "ready"],
 ]);
 const MATTERMOST_SLASH_CALLBACK_PATH = "/api/channels/mattermost/command";
+const DEFAULT_OFFICE_UI_INTAKE_URL = "http://127.0.0.1:19000/gateway/intake";
+const OFFICE_UI_INTAKE_TIMEOUT_MS = 2500;
+
+function resolveOfficeUiIntakeUrl(): string {
+  const configured = process.env.OFFICE_UI_INTAKE_URL?.trim();
+  return configured || DEFAULT_OFFICE_UI_INTAKE_URL;
+}
+
+async function syncOfficeUiIntake(
+  session: ReturnType<typeof buildFormspreeIntakeSession>,
+  logHooks: SubsystemLogger,
+): Promise<void> {
+  const url = resolveOfficeUiIntakeUrl();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OFFICE_UI_INTAKE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildOfficeUiIntakePayload(session)),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      logHooks.warn(
+        `formspree hook Office UI intake sync failed status=${response.status} url=${url}`,
+      );
+      return;
+    }
+    logHooks.info?.(`formspree hook Office UI intake synced status=${response.status} url=${url}`);
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? "timeout"
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    logHooks.warn(`formspree hook Office UI intake sync failed error=${message} url=${url}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 function resolveMattermostSlashCallbackPaths(
   configSnapshot: ReturnType<typeof loadConfig>,
@@ -606,6 +648,7 @@ export function createHooksRequestHandler(
       } catch (err) {
         logHooks.warn(`formspree hook dispatch failed: ${String(err)}`);
       }
+      await syncOfficeUiIntake(intakeSession, logHooks);
       sendJson(res, 200, {
         ok: true,
         source: "formspree",
