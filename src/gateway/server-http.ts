@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   createServer as createHttpServer,
@@ -121,6 +122,11 @@ const GATEWAY_PROBE_STATUS_BY_PATH = new Map<string, "live" | "ready">([
 const MATTERMOST_SLASH_CALLBACK_PATH = "/api/channels/mattermost/command";
 const DEFAULT_OFFICE_UI_INTAKE_URL = "http://127.0.0.1:19000/gateway/intake";
 const OFFICE_UI_INTAKE_TIMEOUT_MS = 2500;
+const DOCUMENT_REQUEST_RUNTIME_GOAL = "Generate a reply email for a document request";
+const DOCUMENT_REQUEST_RUNTIME_CONSTRAINTS = [
+  "Do not include sensitive data",
+  "Generate polite business Japanese",
+];
 
 function resolveOfficeUiIntakeUrl(): string {
   const configured = process.env.OFFICE_UI_INTAKE_URL?.trim();
@@ -159,6 +165,87 @@ async function syncOfficeUiIntake(
   } finally {
     clearTimeout(timeout);
   }
+}
+
+function shouldLaunchDocumentRequestRuntime(
+  session: ReturnType<typeof buildFormspreeIntakeSession>,
+): boolean {
+  if (process.env.VITEST || process.env.OPENCLAW_DISABLE_INTAKE_RUNTIME === "1") {
+    return false;
+  }
+  return session.public_event.category === "document_request";
+}
+
+function buildDocumentRequestRuntimeTaskId(inquiryId: string): string {
+  return `docreq-${inquiryId}`;
+}
+
+function launchDocumentRequestRuntime(
+  session: ReturnType<typeof buildFormspreeIntakeSession>,
+  inquiryId: string,
+  logHooks: SubsystemLogger,
+): string {
+  const taskId = buildDocumentRequestRuntimeTaskId(inquiryId);
+  const scriptPath = `${process.cwd()}/scripts/runtime/sense-runtime-manager-task.sh`;
+  const params = {
+    role: "dev",
+    task_id: taskId,
+    context: {
+      category: session.public_event.category,
+      service: session.routing.service?.trim() || "other",
+    },
+    constraints: DOCUMENT_REQUEST_RUNTIME_CONSTRAINTS,
+  };
+  const child = spawn(
+    scriptPath,
+    [
+      "--task",
+      "reply_draft_document_request",
+      "--input",
+      DOCUMENT_REQUEST_RUNTIME_GOAL,
+      "--params-json",
+      JSON.stringify(params),
+    ],
+    {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    const lines = String(chunk)
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    for (const line of lines) {
+      logHooks.info?.(`[document-request-runtime] task_id=${taskId} stdout=${line}`);
+    }
+  });
+  child.stderr.on("data", (chunk) => {
+    const lines = String(chunk)
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    for (const line of lines) {
+      logHooks.info?.(`[document-request-runtime] task_id=${taskId} ${line}`);
+    }
+  });
+  child.on("error", (error) => {
+    logHooks.warn(
+      `[document-request-runtime] task_id=${taskId} launch failed error=${error.message}`,
+    );
+  });
+  child.on("exit", (code, signal) => {
+    logHooks.info?.(
+      `[document-request-runtime] task_id=${taskId} exit_code=${code ?? -1} signal=${signal ?? "-"}`,
+    );
+  });
+  logHooks.info?.(
+    `[document-request-runtime] launched task_id=${taskId} category=${session.public_event.category}`,
+  );
+  return taskId;
 }
 
 function resolveMattermostSlashCallbackPaths(
@@ -601,6 +688,7 @@ export function createHooksRequestHandler(
       );
       let visibleRunId: string | undefined;
       let runId: string | undefined;
+      let runtimeTaskId: string | undefined;
       try {
         const visibleSessionKey = resolveHookSessionKey({
           hooksConfig,
@@ -648,6 +736,9 @@ export function createHooksRequestHandler(
       } catch (err) {
         logHooks.warn(`formspree hook dispatch failed: ${String(err)}`);
       }
+      if (shouldLaunchDocumentRequestRuntime(intakeSession)) {
+        runtimeTaskId = launchDocumentRequestRuntime(intakeSession, inquiryId, logHooks);
+      }
       await syncOfficeUiIntake(intakeSession, logHooks);
       sendJson(res, 200, {
         ok: true,
@@ -656,6 +747,7 @@ export function createHooksRequestHandler(
         intakeSession,
         runId,
         visibleRunId,
+        runtimeTaskId,
         visibleSessionKey: `hook:formspree:${inquiryId}`,
       });
       return true;
