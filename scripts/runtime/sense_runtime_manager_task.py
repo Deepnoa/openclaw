@@ -4,11 +4,15 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
+import uuid
 import urllib.error
 import urllib.request
 from pathlib import Path
 
 import sense_runtime_bridge as bridge
+from runtime_event_logger import log_runtime_event
+from runtime_runner import run_runtime
 
 # ---------------------------------------------------------------------------
 # Health check — deterministic, no LLM
@@ -198,6 +202,76 @@ def main() -> int:
         load_params(args.params_json),
         args.sandbox_name,
     )
+    role = str(params.get("role") or "").strip().lower()
+    if role == "dev":
+        task_id = str(params.get("task_id") or f"oc-{uuid.uuid4().hex[:12]}")
+        runtime_payload = {
+            "goal": args.input,
+            "context": params.get("context") if isinstance(params.get("context"), dict) else {},
+            "constraints": params.get("constraints") if isinstance(params.get("constraints"), list) else [],
+        }
+        log_runtime_event(
+            component="runtime",
+            event_type="runtime.started",
+            task_id=task_id,
+            role=role,
+            status="running",
+            exit_code=None,
+            runtime_status=None,
+            route_reason=None,
+        )
+        print(
+            f"[runtime] started task_id={task_id} role={role} status=running exit_code=- runtime_result.status=-",
+            file=sys.stderr,
+            flush=True,
+        )
+        runtime_result = run_runtime(role=role, task_id=task_id, payload=runtime_payload)
+        result_obj = runtime_result.get("result") or {}
+        status = str(result_obj.get("status") or "")
+        runtime_exit_code = runtime_result.get("exit_code")
+        if not isinstance(runtime_exit_code, int):
+            runtime_exit_code = 1
+        normalized = {
+            "summary": f"deepnoa-agent-runtime status={status}",
+            "key_points": [
+                f"task_id={task_id}",
+                f"role={role}",
+                f"exit_code={runtime_result.get('exit_code')}",
+            ],
+            "suggested_next_action": "inspect result.json and events.jsonl",
+            "exit_code": runtime_exit_code,
+            "raw_output": json.dumps(result_obj, ensure_ascii=False),
+            "runtime_result": result_obj,
+            "stderr": runtime_result.get("stderr") or "",
+            "task_payload": {
+                "task": args.task,
+                "input": args.input,
+                "params": params,
+            },
+        }
+        if normalized["exit_code"] != 0:
+            normalized["error"] = f"runtime execution failed: status={status}"
+            event_type = "runtime.failed"
+        else:
+            event_type = "runtime.completed"
+        print(
+            f"[runtime] completed task_id={task_id} role={role} status={status or 'unknown'} exit_code={normalized['exit_code']} runtime_result.status={status or '-'}",
+            file=sys.stderr,
+            flush=True,
+        )
+        log_runtime_event(
+            component="runtime",
+            event_type=event_type,
+            task_id=task_id,
+            role=role,
+            status=status or "unknown",
+            exit_code=normalized["exit_code"] if isinstance(normalized["exit_code"], int) else None,
+            runtime_status=status or None,
+            route_reason=None,
+        )
+        print(json.dumps(normalized, ensure_ascii=False))
+        return 0 if normalized["exit_code"] == 0 and status == "completed" else 1
+
     submit_result = submit_manager_task(
         args.base_url,
         token,
