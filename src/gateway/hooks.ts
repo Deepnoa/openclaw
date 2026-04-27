@@ -236,6 +236,8 @@ export type OfficeUiIntakePayload = {
   raw_details_hidden: true;
   name: string;
   message: string;
+  runtime_task_id?: string;
+  has_reply_draft?: boolean;
 };
 
 function getRequestContentType(req: IncomingMessage): string {
@@ -510,7 +512,10 @@ export function buildFormspreeVisibleSessionMessage(session: FormspreeIntakeSess
   ].join("\n");
 }
 
-export function buildOfficeUiIntakePayload(session: FormspreeIntakeSession): OfficeUiIntakePayload {
+export function buildOfficeUiIntakePayload(
+  session: FormspreeIntakeSession,
+  runtimeTaskId?: string,
+): OfficeUiIntakePayload {
   const event = session.public_event;
   const service = session.routing.service?.trim() || "other";
   const hasEmail = session.contact.has_email;
@@ -518,7 +523,7 @@ export function buildOfficeUiIntakePayload(session: FormspreeIntakeSession): Off
   const hasPhone = session.contact.has_phone;
   const hasMessage = session.contact.has_message;
 
-  return {
+  const payload: OfficeUiIntakePayload = {
     type: event.type,
     source: event.source,
     received_at: event.received_at,
@@ -537,6 +542,11 @@ export function buildOfficeUiIntakePayload(session: FormspreeIntakeSession): Off
       `has_company=${hasCompany ? "true" : "false"}, has_phone=${hasPhone ? "true" : "false"}, ` +
       `has_message=${hasMessage ? "true" : "false"}, raw_details_hidden=true).`,
   };
+  if (runtimeTaskId) {
+    payload.runtime_task_id = runtimeTaskId;
+    payload.has_reply_draft = true;
+  }
+  return payload;
 }
 
 export function normalizeHookHeaders(req: IncomingMessage) {

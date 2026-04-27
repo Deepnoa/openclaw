@@ -136,6 +136,7 @@ function resolveOfficeUiIntakeUrl(): string {
 async function syncOfficeUiIntake(
   session: ReturnType<typeof buildFormspreeIntakeSession>,
   logHooks: SubsystemLogger,
+  runtimeTaskId?: string,
 ): Promise<void> {
   const url = resolveOfficeUiIntakeUrl();
   const controller = new AbortController();
@@ -144,7 +145,7 @@ async function syncOfficeUiIntake(
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildOfficeUiIntakePayload(session)),
+      body: JSON.stringify(buildOfficeUiIntakePayload(session, runtimeTaskId)),
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -739,7 +740,7 @@ export function createHooksRequestHandler(
       if (shouldLaunchDocumentRequestRuntime(intakeSession)) {
         runtimeTaskId = launchDocumentRequestRuntime(intakeSession, inquiryId, logHooks);
       }
-      await syncOfficeUiIntake(intakeSession, logHooks);
+      await syncOfficeUiIntake(intakeSession, logHooks, runtimeTaskId);
       sendJson(res, 200, {
         ok: true,
         source: "formspree",
