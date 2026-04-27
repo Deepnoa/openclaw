@@ -8,6 +8,8 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
+from runtime_event_logger import log_runtime_event
+
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -128,16 +130,49 @@ def extract_evaluator_result(entry_payload: dict) -> dict | None:
     return entry_result if isinstance(entry_result, dict) else None
 
 
+def _extract_task_context(entry_payload: dict) -> tuple[str, str]:
+    role = ""
+    task_id = ""
+    entry_result = entry_payload.get("entry_result")
+    if isinstance(entry_result, dict):
+        policy_input = entry_result.get("policy_input")
+        if isinstance(policy_input, dict):
+            task_payload = policy_input.get("task_payload")
+            if isinstance(task_payload, dict):
+                params = task_payload.get("params")
+                if isinstance(params, dict):
+                    role = str(params.get("role") or "").strip().lower()
+                    task_id = str(params.get("task_id") or "").strip()
+    return role, task_id
+
+
 def main() -> int:
     args = build_parser().parse_args()
     entry_payload = load_entry(args)
     runtime_args = build_runtime_args(args)
     script_dir = Path(__file__).resolve().parent
     dispatch_trace_span_id = build_span_id('dispatch')
+    role, task_id = _extract_task_context(entry_payload)
 
     shortcut_policy = build_shortcut_policy(entry_payload)
     if shortcut_policy is not None:
         shortcut_policy['dispatch_trace_span_id'] = dispatch_trace_span_id
+        route_reason = 'shortcut_executor'
+        log_runtime_event(
+            component="dispatch",
+            event_type="dispatch.started",
+            task_id=task_id or None,
+            role=role or None,
+            status="running",
+            exit_code=None,
+            runtime_status=None,
+            route_reason=route_reason,
+        )
+        print(
+            f"[dispatch] role={role or 'unknown'} task_id={task_id or '-'} route_reason={route_reason}",
+            file=sys.stderr,
+            flush=True,
+        )
         output = {
             'decision_trace_id': entry_payload.get('decision_trace_id'),
             'dispatch_trace_span_id': dispatch_trace_span_id,
@@ -146,6 +181,33 @@ def main() -> int:
             'dispatch_reason': 'high-confidence shortcut manager plan was sent directly to the thin manager executor',
             'dispatch_result': run_executor(script_dir, shortcut_policy, runtime_args),
         }
+        dispatch_result = output.get("dispatch_result") if isinstance(output.get("dispatch_result"), dict) else {}
+        exit_code = dispatch_result.get("exit_summary", {}).get("main_exit_code") if isinstance(dispatch_result.get("exit_summary"), dict) else None
+        status = dispatch_result.get("executor_state")
+        runtime_status = (
+            dispatch_result.get("main_action", {})
+            .get("result", {})
+            .get("runtime_result", {})
+            .get("status")
+            if isinstance(dispatch_result.get("main_action"), dict)
+            and isinstance(dispatch_result.get("main_action", {}).get("result"), dict)
+            else None
+        )
+        print(
+            f"[dispatch] role={role or 'unknown'} task_id={task_id or '-'} status={status or 'unknown'} exit_code={exit_code} runtime_result.status={runtime_status or '-'}",
+            file=sys.stderr,
+            flush=True,
+        )
+        log_runtime_event(
+            component="dispatch",
+            event_type="dispatch.completed",
+            task_id=task_id or None,
+            role=role or None,
+            status=str(status or "unknown"),
+            exit_code=exit_code if isinstance(exit_code, int) else None,
+            runtime_status=str(runtime_status) if runtime_status else None,
+            route_reason=route_reason,
+        )
         print(json.dumps(output, ensure_ascii=False, indent=2))
         return 0
 
@@ -165,6 +227,22 @@ def main() -> int:
     policy_payload = run_policy(script_dir, evaluator_result)
     policy_payload['decision_trace_id'] = entry_payload.get('decision_trace_id')
     policy_payload['dispatch_trace_span_id'] = dispatch_trace_span_id
+    route_reason = 'full_evaluator'
+    log_runtime_event(
+        component="dispatch",
+        event_type="dispatch.started",
+        task_id=task_id or None,
+        role=role or None,
+        status="running",
+        exit_code=None,
+        runtime_status=None,
+        route_reason=route_reason,
+    )
+    print(
+        f"[dispatch] role={role or 'unknown'} task_id={task_id or '-'} route_reason={route_reason}",
+        file=sys.stderr,
+        flush=True,
+    )
     output = {
         'decision_trace_id': entry_payload.get('decision_trace_id'),
         'dispatch_trace_span_id': dispatch_trace_span_id,
@@ -173,6 +251,33 @@ def main() -> int:
         'dispatch_reason': 'shortcut was unavailable, so the manager policy and executor followed the evaluator path',
         'dispatch_result': run_executor(script_dir, policy_payload, runtime_args),
     }
+    dispatch_result = output.get("dispatch_result") if isinstance(output.get("dispatch_result"), dict) else {}
+    exit_code = dispatch_result.get("exit_summary", {}).get("main_exit_code") if isinstance(dispatch_result.get("exit_summary"), dict) else None
+    status = dispatch_result.get("executor_state")
+    runtime_status = (
+        dispatch_result.get("main_action", {})
+        .get("result", {})
+        .get("runtime_result", {})
+        .get("status")
+        if isinstance(dispatch_result.get("main_action"), dict)
+        and isinstance(dispatch_result.get("main_action", {}).get("result"), dict)
+        else None
+    )
+    print(
+        f"[dispatch] role={role or 'unknown'} task_id={task_id or '-'} status={status or 'unknown'} exit_code={exit_code} runtime_result.status={runtime_status or '-'}",
+        file=sys.stderr,
+        flush=True,
+    )
+    log_runtime_event(
+        component="dispatch",
+        event_type="dispatch.completed",
+        task_id=task_id or None,
+        role=role or None,
+        status=str(status or "unknown"),
+        exit_code=exit_code if isinstance(exit_code, int) else None,
+        runtime_status=str(runtime_status) if runtime_status else None,
+        route_reason=route_reason,
+    )
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 

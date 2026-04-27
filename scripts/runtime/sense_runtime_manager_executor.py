@@ -9,6 +9,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
+from runtime_event_logger import log_runtime_event
 from sense_runtime_manager_signal_classifier import classify_manager_signal
 
 
@@ -1038,6 +1039,16 @@ def decide_post_task_followup(
     return True, None
 
 
+def _task_identity(task_payload: dict | None) -> tuple[str, str]:
+    payload = task_payload if isinstance(task_payload, dict) else {}
+    params = payload.get("params")
+    if not isinstance(params, dict):
+        return "", ""
+    role = str(params.get("role") or "").strip().lower()
+    task_id = str(params.get("task_id") or "").strip()
+    return role, task_id
+
+
 def main() -> int:
     started_at = time.monotonic()
     args = build_parser().parse_args()
@@ -1061,6 +1072,22 @@ def main() -> int:
     secondary_task_payload = normalize_task_payload(
         policy.get('secondary_task_payload') or policy.get('task_payload'),
         args.input,
+    )
+    role, task_id = _task_identity(main_task_payload)
+    log_runtime_event(
+        component="executor",
+        event_type="executor.started",
+        task_id=task_id or None,
+        role=role or None,
+        status="running",
+        exit_code=None,
+        runtime_status=None,
+        route_reason=None,
+    )
+    print(
+        f"[executor] started task_id={task_id or '-'} role={role or 'unknown'} status=running exit_code=- runtime_result.status=-",
+        file=sys.stderr,
+        flush=True,
     )
 
     secondary_placeholder = build_secondary_placeholder(
@@ -1322,6 +1349,31 @@ def main() -> int:
         else:
             output['executor_state'] = 'completed_resolved'
     output = finalize_output(output)
+    main_exit_code = output.get("exit_summary", {}).get("main_exit_code") if isinstance(output.get("exit_summary"), dict) else None
+    runtime_status = (
+        output.get("main_action", {})
+        .get("result", {})
+        .get("runtime_result", {})
+        .get("status")
+        if isinstance(output.get("main_action"), dict)
+        and isinstance(output.get("main_action", {}).get("result"), dict)
+        else None
+    )
+    print(
+        f"[executor] completed task_id={task_id or '-'} role={role or 'unknown'} status={output.get('executor_state')} exit_code={main_exit_code} runtime_result.status={runtime_status or '-'}",
+        file=sys.stderr,
+        flush=True,
+    )
+    log_runtime_event(
+        component="executor",
+        event_type="executor.completed",
+        task_id=task_id or None,
+        role=role or None,
+        status=str(output.get("executor_state") or "unknown"),
+        exit_code=main_exit_code if isinstance(main_exit_code, int) else None,
+        runtime_status=str(runtime_status) if runtime_status else None,
+        route_reason=None,
+    )
     print(json.dumps(output, ensure_ascii=False, indent=2))
     return 0
 

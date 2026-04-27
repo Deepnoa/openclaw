@@ -1,3 +1,4 @@
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   createServer as createHttpServer,
@@ -35,6 +36,7 @@ import {
 } from "./control-ui.js";
 import { applyHookMappings } from "./hooks-mapping.js";
 import {
+  buildOfficeUiIntakePayload,
   extractHookToken,
   getHookAgentPolicyError,
   getHookChannelError,
@@ -118,6 +120,134 @@ const GATEWAY_PROBE_STATUS_BY_PATH = new Map<string, "live" | "ready">([
   ["/readyz", "ready"],
 ]);
 const MATTERMOST_SLASH_CALLBACK_PATH = "/api/channels/mattermost/command";
+const DEFAULT_OFFICE_UI_INTAKE_URL = "http://127.0.0.1:19000/gateway/intake";
+const OFFICE_UI_INTAKE_TIMEOUT_MS = 2500;
+const DOCUMENT_REQUEST_RUNTIME_GOAL = "Generate a reply email for a document request";
+const DOCUMENT_REQUEST_RUNTIME_CONSTRAINTS = [
+  "Do not include sensitive data",
+  "Generate polite business Japanese",
+];
+
+function resolveOfficeUiIntakeUrl(): string {
+  const configured = process.env.OFFICE_UI_INTAKE_URL?.trim();
+  return configured || DEFAULT_OFFICE_UI_INTAKE_URL;
+}
+
+async function syncOfficeUiIntake(
+  session: ReturnType<typeof buildFormspreeIntakeSession>,
+  logHooks: SubsystemLogger,
+  runtimeTaskId?: string,
+): Promise<void> {
+  const url = resolveOfficeUiIntakeUrl();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OFFICE_UI_INTAKE_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(buildOfficeUiIntakePayload(session, runtimeTaskId)),
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      logHooks.warn(
+        `formspree hook Office UI intake sync failed status=${response.status} url=${url}`,
+      );
+      return;
+    }
+    logHooks.info?.(`formspree hook Office UI intake synced status=${response.status} url=${url}`);
+  } catch (error) {
+    const message =
+      error instanceof Error && error.name === "AbortError"
+        ? "timeout"
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    logHooks.warn(`formspree hook Office UI intake sync failed error=${message} url=${url}`);
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function shouldLaunchDocumentRequestRuntime(
+  session: ReturnType<typeof buildFormspreeIntakeSession>,
+): boolean {
+  if (process.env.VITEST || process.env.OPENCLAW_DISABLE_INTAKE_RUNTIME === "1") {
+    return false;
+  }
+  return session.public_event.category === "document_request";
+}
+
+function buildDocumentRequestRuntimeTaskId(inquiryId: string): string {
+  return `docreq-${inquiryId}`;
+}
+
+function launchDocumentRequestRuntime(
+  session: ReturnType<typeof buildFormspreeIntakeSession>,
+  inquiryId: string,
+  logHooks: SubsystemLogger,
+): string {
+  const taskId = buildDocumentRequestRuntimeTaskId(inquiryId);
+  const scriptPath = `${process.cwd()}/scripts/runtime/sense-runtime-manager-task.sh`;
+  const params = {
+    role: "dev",
+    task_id: taskId,
+    context: {
+      category: session.public_event.category,
+      service: session.routing.service?.trim() || "other",
+    },
+    constraints: DOCUMENT_REQUEST_RUNTIME_CONSTRAINTS,
+  };
+  const child = spawn(
+    scriptPath,
+    [
+      "--task",
+      "reply_draft_document_request",
+      "--input",
+      DOCUMENT_REQUEST_RUNTIME_GOAL,
+      "--params-json",
+      JSON.stringify(params),
+    ],
+    {
+      cwd: process.cwd(),
+      env: process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk) => {
+    const lines = String(chunk)
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    for (const line of lines) {
+      logHooks.info?.(`[document-request-runtime] task_id=${taskId} stdout=${line}`);
+    }
+  });
+  child.stderr.on("data", (chunk) => {
+    const lines = String(chunk)
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+    for (const line of lines) {
+      logHooks.info?.(`[document-request-runtime] task_id=${taskId} ${line}`);
+    }
+  });
+  child.on("error", (error) => {
+    logHooks.warn(
+      `[document-request-runtime] task_id=${taskId} launch failed error=${error.message}`,
+    );
+  });
+  child.on("exit", (code, signal) => {
+    logHooks.info?.(
+      `[document-request-runtime] task_id=${taskId} exit_code=${code ?? -1} signal=${signal ?? "-"}`,
+    );
+  });
+  logHooks.info?.(
+    `[document-request-runtime] launched task_id=${taskId} category=${session.public_event.category}`,
+  );
+  return taskId;
+}
 
 function resolveMattermostSlashCallbackPaths(
   configSnapshot: ReturnType<typeof loadConfig>,
@@ -559,6 +689,7 @@ export function createHooksRequestHandler(
       );
       let visibleRunId: string | undefined;
       let runId: string | undefined;
+      let runtimeTaskId: string | undefined;
       try {
         const visibleSessionKey = resolveHookSessionKey({
           hooksConfig,
@@ -606,6 +737,10 @@ export function createHooksRequestHandler(
       } catch (err) {
         logHooks.warn(`formspree hook dispatch failed: ${String(err)}`);
       }
+      if (shouldLaunchDocumentRequestRuntime(intakeSession)) {
+        runtimeTaskId = launchDocumentRequestRuntime(intakeSession, inquiryId, logHooks);
+      }
+      await syncOfficeUiIntake(intakeSession, logHooks, runtimeTaskId);
       sendJson(res, 200, {
         ok: true,
         source: "formspree",
@@ -613,6 +748,7 @@ export function createHooksRequestHandler(
         intakeSession,
         runId,
         visibleRunId,
+        runtimeTaskId,
         visibleSessionKey: `hook:formspree:${inquiryId}`,
       });
       return true;
