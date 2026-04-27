@@ -126,3 +126,15 @@ test/config-form.analyze.telegram.test.ts
 ui/src/ui/theme-variants.browser.test.ts
 ui/.vitest-attachments
 docs/superpowers
+
+# runtime outputs
+runs/
+workspace/
+dist-runtime/
+
+# local python env
+.venv/
+
+# local CLAUDE links/files
+CLAUDE.md
+src/gateway/server-methods/CLAUDE.md
