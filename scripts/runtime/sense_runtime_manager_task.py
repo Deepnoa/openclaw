@@ -10,6 +10,13 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from contract.runtime_contract import (
+    EVENT_RUNTIME_COMPLETED,
+    EVENT_RUNTIME_FAILED,
+    EVENT_RUNTIME_STARTED,
+    STATUS_COMPLETED,
+    STATUS_RUNNING,
+)
 import sense_runtime_bridge as bridge
 from ollama_health import check_ollama_health
 from runtime_event_logger import log_runtime_event
@@ -206,10 +213,10 @@ def main() -> int:
         }
         log_runtime_event(
             component="runtime",
-            event_type="runtime.started",
+            event_type=EVENT_RUNTIME_STARTED,
             task_id=task_id,
             role=role,
-            status="running",
+            status=STATUS_RUNNING,
             exit_code=None,
             runtime_status=None,
             route_reason=None,
@@ -245,9 +252,9 @@ def main() -> int:
         }
         if normalized["exit_code"] != 0:
             normalized["error"] = f"runtime execution failed: status={status}"
-            event_type = "runtime.failed"
+            event_type = EVENT_RUNTIME_FAILED
         else:
-            event_type = "runtime.completed"
+            event_type = EVENT_RUNTIME_COMPLETED
         print(
             f"[runtime] completed task_id={task_id} role={role} status={status or 'unknown'} exit_code={normalized['exit_code']} runtime_result.status={status or '-'}",
             file=sys.stderr,
@@ -264,7 +271,7 @@ def main() -> int:
             route_reason=None,
         )
         print(json.dumps(normalized, ensure_ascii=False))
-        return 0 if normalized["exit_code"] == 0 and status == "completed" else 1
+        return 0 if normalized["exit_code"] == 0 and status == STATUS_COMPLETED else 1
 
     submit_result = submit_manager_task(
         args.base_url,

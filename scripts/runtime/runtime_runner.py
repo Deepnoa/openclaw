@@ -5,6 +5,8 @@ import json
 import subprocess
 from pathlib import Path
 
+from contract.runtime_contract import STATUS_FAILED
+
 RUNTIME_DIR = "/home/deepnoa/deepnoa-agent-runtime"
 PYTHON_BIN = f"{RUNTIME_DIR}/.venv/bin/python"
 RUN_SCRIPT = f"{RUNTIME_DIR}/scripts/run_agent.py"
@@ -37,7 +39,7 @@ def run_runtime(role: str, task_id: str, payload: dict) -> dict:
         result = json.loads(proc.stdout)
     except Exception:
         result = {
-            "status": "failed",
+            "status": STATUS_FAILED,
             "error": "stdout_json_parse_error",
             "raw_stdout": proc.stdout,
         }

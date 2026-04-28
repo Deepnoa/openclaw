@@ -8,7 +8,9 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-QUEUE_PATH = Path("/home/deepnoa/openclaw/runs/queued-runtime-tasks.jsonl")
+from contract.runtime_contract import QUEUE_FILENAME
+
+QUEUE_PATH = Path(f"/home/deepnoa/openclaw/runs/{QUEUE_FILENAME}")
 
 
 def now_iso() -> str:

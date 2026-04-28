@@ -4,6 +4,19 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from contract.runtime_contract import (
+    EVENT_RUNTIME_OFFLINE,
+    EVENT_RUNTIME_RETRY_COMPLETED,
+    EVENT_RUNTIME_RETRY_FAILED,
+    EVENT_RUNTIME_RETRY_STARTED,
+    STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_OFFLINE,
+    STATUS_QUEUED,
+    STATUS_RETRYING,
+    STATUS_RUNNING,
+    STATUS_UNKNOWN,
+)
 from ollama_health import check_ollama_health
 from runtime_event_logger import log_runtime_event
 from runtime_queue import load_queue_items, now_iso, write_queue_items
@@ -20,8 +33,8 @@ def _as_int(value: Any, default: int) -> int:
 def _runtime_status(runtime_result: dict[str, Any]) -> tuple[str, int]:
     result = runtime_result.get("result")
     if not isinstance(result, dict):
-        return "unknown", 1
-    status = str(result.get("status") or "unknown")
+        return STATUS_UNKNOWN, 1
+    status = str(result.get("status") or STATUS_UNKNOWN)
     exit_code = runtime_result.get("exit_code")
     return status, exit_code if isinstance(exit_code, int) else 1
 
@@ -32,7 +45,7 @@ def _save(items: list[dict[str, Any]]) -> None:
 
 def main() -> int:
     items = load_queue_items()
-    queued = [item for item in items if str(item.get("status") or "") == "queued"]
+    queued = [item for item in items if str(item.get("status") or "") == STATUS_QUEUED]
     if not queued:
         print("queued=0")
         return 0
@@ -43,12 +56,12 @@ def main() -> int:
         for item in queued:
             log_runtime_event(
                 component="runtime",
-                event_type="runtime.offline",
+                event_type=EVENT_RUNTIME_OFFLINE,
                 task_id=str(item.get("task_id") or "") or None,
                 role=str(item.get("role") or "") or None,
-                status="queued",
+                status=STATUS_QUEUED,
                 exit_code=None,
-                runtime_status="offline",
+                runtime_status=STATUS_OFFLINE,
                 route_reason=f"sense_offline:{detail}",
             )
         print(f"queued={len(queued)} online=false detail={detail}")
@@ -59,25 +72,25 @@ def main() -> int:
     requeued = 0
 
     for item in items:
-        if str(item.get("status") or "") != "queued":
+        if str(item.get("status") or "") != STATUS_QUEUED:
             continue
         task_id = str(item.get("task_id") or "").strip()
         role = str(item.get("role") or "dev").strip() or "dev"
         max_attempts = max(_as_int(item.get("max_attempts"), 5), 1)
         attempts = _as_int(item.get("attempts"), 0)
         if attempts >= max_attempts:
-            item["status"] = "failed"
+            item["status"] = STATUS_FAILED
             item["updated_at"] = now_iso()
             item["reason"] = "max_attempts_exceeded"
             failed += 1
             log_runtime_event(
                 component="runtime",
-                event_type="runtime.retry_failed",
+                event_type=EVENT_RUNTIME_RETRY_FAILED,
                 task_id=task_id or None,
                 role=role,
-                status="failed",
+                status=STATUS_FAILED,
                 exit_code=None,
-                runtime_status="failed",
+                runtime_status=STATUS_FAILED,
                 route_reason="max_attempts_exceeded",
             )
             _save(items)
@@ -88,12 +101,12 @@ def main() -> int:
         item["updated_at"] = now_iso()
         log_runtime_event(
             component="runtime",
-            event_type="runtime.retry_started",
+            event_type=EVENT_RUNTIME_RETRY_STARTED,
             task_id=task_id or None,
             role=role,
-            status="running",
+            status=STATUS_RUNNING,
             exit_code=None,
-            runtime_status="retrying",
+            runtime_status=STATUS_RETRYING,
             route_reason=f"attempt_{next_attempt}",
         )
         _save(items)
@@ -103,23 +116,23 @@ def main() -> int:
         status, exit_code = _runtime_status(runtime_result)
         result_obj = runtime_result.get("result") if isinstance(runtime_result.get("result"), dict) else {}
 
-        if exit_code == 0 and status == "completed":
-            item["status"] = "completed"
+        if exit_code == 0 and status == STATUS_COMPLETED:
+            item["status"] = STATUS_COMPLETED
             item["updated_at"] = now_iso()
             item["reason"] = "retry_completed"
             completed += 1
             log_runtime_event(
                 component="runtime",
-                event_type="runtime.retry_completed",
+                event_type=EVENT_RUNTIME_RETRY_COMPLETED,
                 task_id=task_id or None,
                 role=role,
-                status="completed",
+                status=STATUS_COMPLETED,
                 exit_code=exit_code,
                 runtime_status=status,
                 route_reason=None,
             )
         else:
-            item["status"] = "failed" if next_attempt >= max_attempts else "queued"
+            item["status"] = STATUS_FAILED if next_attempt >= max_attempts else STATUS_QUEUED
             item["updated_at"] = now_iso()
             item["reason"] = "runtime_retry_failed"
             item["last_error"] = {
@@ -128,13 +141,13 @@ def main() -> int:
                 "stderr": runtime_result.get("stderr") or "",
                 "result": result_obj,
             }
-            if item["status"] == "failed":
+            if item["status"] == STATUS_FAILED:
                 failed += 1
             else:
                 requeued += 1
             log_runtime_event(
                 component="runtime",
-                event_type="runtime.retry_failed",
+                event_type=EVENT_RUNTIME_RETRY_FAILED,
                 task_id=task_id or None,
                 role=role,
                 status=str(item["status"]),

@@ -5,7 +5,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-EVENT_LOG_PATH = Path("/home/deepnoa/openclaw/runs/runtime-events.jsonl")
+from contract.runtime_contract import EVENT_LOG_FILENAME
+
+EVENT_LOG_PATH = Path(f"/home/deepnoa/openclaw/runs/{EVENT_LOG_FILENAME}")
 
 
 def log_runtime_event(
