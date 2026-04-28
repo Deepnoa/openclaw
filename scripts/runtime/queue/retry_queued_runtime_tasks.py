@@ -25,8 +25,8 @@ from scripts.runtime.contract.runtime_contract import (
 )
 from scripts.runtime.adapter.ollama_health import check_ollama_health
 from scripts.runtime.queue.runtime_queue import load_queue_items, now_iso, write_queue_items
-from scripts.runtime.runtime_event_logger import log_runtime_event
-from scripts.runtime.runtime_runner import run_runtime
+from scripts.runtime.core.runtime_event_logger import log_runtime_event
+from scripts.runtime.core.runtime_runner import run_runtime
 
 
 def _as_int(value: Any, default: int) -> int:

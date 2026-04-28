@@ -32,8 +32,8 @@ except ModuleNotFoundError:
     )
 from scripts.runtime.adapter import sense_runtime_bridge as bridge
 from scripts.runtime.adapter.ollama_health import check_ollama_health
-from scripts.runtime.runtime_event_logger import log_runtime_event
-from scripts.runtime.runtime_runner import run_runtime
+from scripts.runtime.core.runtime_event_logger import log_runtime_event
+from scripts.runtime.core.runtime_runner import run_runtime
 
 # ---------------------------------------------------------------------------
 # Health check — deterministic, no LLM

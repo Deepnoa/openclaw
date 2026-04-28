@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from uuid import uuid4
 
-from runtime_event_logger import log_runtime_event
+from scripts.runtime.core.runtime_event_logger import log_runtime_event
 from scripts.runtime.adapter.sense_runtime_manager_signal_classifier import classify_manager_signal
 
 

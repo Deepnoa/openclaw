@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from uuid import uuid4
 
-from runtime_event_logger import log_runtime_event
+from scripts.runtime.core.runtime_event_logger import log_runtime_event
 
 
 def build_parser() -> argparse.ArgumentParser:
