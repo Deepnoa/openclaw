@@ -2,12 +2,17 @@
 
 export type {
   GeneratedImageAsset,
+  ImageGenerationBackground,
+  ImageGenerationOpenAIBackground,
+  ImageGenerationOpenAIModeration,
+  ImageGenerationOpenAIOptions,
+  ImageGenerationOutputFormat,
   ImageGenerationProvider,
+  ImageGenerationProviderConfiguredContext,
+  ImageGenerationProviderOptions,
+  ImageGenerationQuality,
   ImageGenerationResolution,
   ImageGenerationRequest,
   ImageGenerationResult,
   ImageGenerationSourceImage,
 } from "../image-generation/types.js";
-
-export { buildGoogleImageGenerationProvider } from "../image-generation/providers/google.js";
-export { buildOpenAIImageGenerationProvider } from "../image-generation/providers/openai.js";

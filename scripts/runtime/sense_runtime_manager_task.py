@@ -11,6 +11,7 @@ import urllib.request
 from pathlib import Path
 
 import sense_runtime_bridge as bridge
+from ollama_health import check_ollama_health
 from runtime_event_logger import log_runtime_event
 from runtime_runner import run_runtime
 
@@ -19,11 +20,6 @@ from runtime_runner import run_runtime
 # ---------------------------------------------------------------------------
 
 _HEALTH_CHECK_TIMEOUT = float(os.environ.get("HEALTH_CHECK_TIMEOUT", "5"))
-_OLLAMA_BASE_URL = (
-    os.environ.get("OLLAMA_BASE_URL")
-    or os.environ.get("OLLAMA_HOST")
-    or "http://localhost:11434"
-)
 
 
 def _probe_http(url: str, timeout: float) -> tuple[bool, str]:
@@ -33,7 +29,6 @@ def _probe_http(url: str, timeout: float) -> tuple[bool, str]:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return True, f"HTTP {resp.status}"
     except urllib.error.HTTPError as exc:
-        # An HTTP error response still means the server is up
         return True, f"HTTP {exc.code}"
     except urllib.error.URLError as exc:
         return False, str(exc.reason)
@@ -70,12 +65,11 @@ def run_health_check(base_url: str, timeout: float = _HEALTH_CHECK_TIMEOUT) -> d
     fail_points: list[str] = []
 
     # --- Ollama ---
-    ollama_url = _OLLAMA_BASE_URL.rstrip("/") + "/api/tags"
-    reachable, detail = _probe_http(ollama_url, timeout)
-    if reachable:
-        ok_points.append(f"Ollama responding ({detail})")
+    ollama_health = check_ollama_health(timeout=timeout)
+    if ollama_health.get("online"):
+        ok_points.append(f"Ollama responding ({ollama_health['detail']})")
     else:
-        fail_points.append(f"Ollama not reachable: {detail}")
+        fail_points.append(f"Ollama not reachable: {ollama_health['detail']}")
 
     # --- Sense worker ---
     sense_probe = base_url.rstrip("/") + "/"

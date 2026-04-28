@@ -1,6 +1,14 @@
 {
   "id": "together",
+  "enabledByDefault": true,
   "providers": ["together"],
+  "providerRequest": {
+    "providers": {
+      "together": {
+        "family": "together"
+      }
+    }
+  },
   "providerAuthEnvVars": {
     "together": ["TOGETHER_API_KEY"]
   },
@@ -19,6 +27,9 @@
       "cliDescription": "Together AI API key"
     }
   ],
+  "contracts": {
+    "videoGenerationProviders": ["together"]
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

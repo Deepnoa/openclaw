@@ -1,19 +1,17 @@
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
+import type { OpenClawConfig } from "openclaw/plugin-sdk/config-types";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { writeSkill } from "../../../src/agents/skills.e2e-test-helpers.js";
-import type { OpenClawConfig } from "../../../src/config/config.js";
 import { registerTelegramNativeCommands } from "./bot-native-commands.js";
 import {
   createNativeCommandTestParams,
+  listSkillCommandsForAgents,
   resetNativeCommandMenuMocks,
   waitForRegisteredCommands,
 } from "./bot-native-commands.menu-test-support.js";
-import {
-  pluginCommandMocks,
-  resetPluginCommandMocks,
-} from "./bot-native-commands.plugin-command-test-support.js";
+import { resetPluginCommandMocks } from "./test-support/plugin-command.js";
+import { writeSkill } from "./test-support/write-skill.js";
 
 const tempDirs: string[] = [];
 
@@ -28,9 +26,7 @@ describe("registerTelegramNativeCommands skill allowlist integration", () => {
     resetNativeCommandMenuMocks();
     resetPluginCommandMocks();
     await Promise.all(
-      tempDirs
-        .splice(0, tempDirs.length)
-        .map((dir) => fs.rm(dir, { recursive: true, force: true })),
+      tempDirs.splice(0).map((dir) => fs.rm(dir, { recursive: true, force: true })),
     );
   });
 
@@ -62,6 +58,11 @@ describe("registerTelegramNativeCommands skill allowlist integration", () => {
         },
       ],
     };
+    const actualSkillCommands = await import("../../../src/auto-reply/skill-commands.js");
+    listSkillCommandsForAgents.mockImplementation(
+      ({ cfg, agentIds }: { cfg: OpenClawConfig; agentIds?: string[] }) =>
+        actualSkillCommands.listSkillCommandsForAgents({ cfg, agentIds }),
+    );
 
     registerTelegramNativeCommands({
       ...createNativeCommandTestParams(cfg, {
