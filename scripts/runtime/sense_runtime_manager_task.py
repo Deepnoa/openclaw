@@ -10,13 +10,22 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-from contract.runtime_contract import (
-    EVENT_RUNTIME_COMPLETED,
-    EVENT_RUNTIME_FAILED,
-    EVENT_RUNTIME_STARTED,
-    STATUS_COMPLETED,
-    STATUS_RUNNING,
-)
+try:
+    from scripts.runtime.contract.runtime_contract import (
+        EVENT_RUNTIME_COMPLETED,
+        EVENT_RUNTIME_FAILED,
+        EVENT_RUNTIME_STARTED,
+        STATUS_COMPLETED,
+        STATUS_RUNNING,
+    )
+except ModuleNotFoundError:
+    from contract.runtime_contract import (
+        EVENT_RUNTIME_COMPLETED,
+        EVENT_RUNTIME_FAILED,
+        EVENT_RUNTIME_STARTED,
+        STATUS_COMPLETED,
+        STATUS_RUNNING,
+    )
 import sense_runtime_bridge as bridge
 from ollama_health import check_ollama_health
 from runtime_event_logger import log_runtime_event

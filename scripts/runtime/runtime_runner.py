@@ -5,7 +5,10 @@ import json
 import subprocess
 from pathlib import Path
 
-from contract.runtime_contract import STATUS_FAILED
+try:
+    from scripts.runtime.contract.runtime_contract import STATUS_FAILED
+except ModuleNotFoundError:
+    from contract.runtime_contract import STATUS_FAILED
 
 RUNTIME_DIR = "/home/deepnoa/deepnoa-agent-runtime"
 PYTHON_BIN = f"{RUNTIME_DIR}/.venv/bin/python"

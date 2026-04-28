@@ -5,7 +5,10 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from contract.runtime_contract import EVENT_LOG_FILENAME
+try:
+    from scripts.runtime.contract.runtime_contract import EVENT_LOG_FILENAME
+except ModuleNotFoundError:
+    from contract.runtime_contract import EVENT_LOG_FILENAME
 
 EVENT_LOG_PATH = Path(f"/home/deepnoa/openclaw/runs/{EVENT_LOG_FILENAME}")
 

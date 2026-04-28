@@ -8,7 +8,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 from typing import Any
 
-from contract.runtime_contract import QUEUE_FILENAME
+from scripts.runtime.contract.runtime_contract import QUEUE_FILENAME
 
 QUEUE_PATH = Path(f"/home/deepnoa/openclaw/runs/{QUEUE_FILENAME}")
 

@@ -2,9 +2,15 @@
 from __future__ import annotations
 
 import json
+import sys
+from pathlib import Path
 from typing import Any
 
-from contract.runtime_contract import (
+# Allow direct script execution while keeping package-style imports.
+if __package__ in (None, ""):
+    sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+from scripts.runtime.contract.runtime_contract import (
     EVENT_RUNTIME_OFFLINE,
     EVENT_RUNTIME_RETRY_COMPLETED,
     EVENT_RUNTIME_RETRY_FAILED,
@@ -17,10 +23,10 @@ from contract.runtime_contract import (
     STATUS_RUNNING,
     STATUS_UNKNOWN,
 )
-from ollama_health import check_ollama_health
-from runtime_event_logger import log_runtime_event
-from runtime_queue import load_queue_items, now_iso, write_queue_items
-from runtime_runner import run_runtime
+from scripts.runtime.ollama_health import check_ollama_health
+from scripts.runtime.queue.runtime_queue import load_queue_items, now_iso, write_queue_items
+from scripts.runtime.runtime_event_logger import log_runtime_event
+from scripts.runtime.runtime_runner import run_runtime
 
 
 def _as_int(value: Any, default: int) -> int:
