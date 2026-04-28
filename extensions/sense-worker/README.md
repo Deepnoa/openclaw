@@ -10,6 +10,11 @@ Optional OpenClaw extension for delegating summarize or heavy tasks to a Sense w
 
 - `sense-worker`
 
+## Commands
+
+- `/openclaw run ...`
+- `/openclaw sense-runs ...`
+
 ## Example
 
 ```json

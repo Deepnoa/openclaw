@@ -44,7 +44,7 @@ describe("run-command", () => {
     const result = await handleRunCommand(makeContext(undefined));
     expect(result.text).toContain("OpenClaw run commands");
     expect(result.text).toContain("/openclaw run health");
-    expect(result.text).toContain("/openclaw runs health");
+    expect(result.text).toContain("/openclaw sense-runs health");
   });
 
   it("builds a queued health run record", () => {

@@ -23,7 +23,7 @@ describe("sense worker plugin registration", () => {
     expect(registerCommand.mock.calls.map(([entry]) => entry?.name)).toEqual([
       "nemoclaw",
       "run",
-      "runs",
+      "sense-runs",
     ]);
     expect(registerTool).toHaveBeenCalledTimes(2);
     const [factory, options] = registerTool.mock.calls[0] ?? [];

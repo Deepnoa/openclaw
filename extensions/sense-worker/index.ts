@@ -26,8 +26,8 @@ export default definePluginEntry({
       handler: async (ctx) => await handleRunCommand(ctx),
     });
     api.registerCommand({
-      name: "runs",
-      description: "Alias for /run to queue an OpenClaw run record.",
+      name: "sense-runs",
+      description: "Sense-specific alias for /run to queue an OpenClaw run record.",
       acceptsArgs: true,
       handler: async (ctx) => await handleRunCommand(ctx),
     });
