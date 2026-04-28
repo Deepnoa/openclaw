@@ -1,8 +1,12 @@
 import fs from "node:fs/promises";
-import { createServer as createHttpServer } from "node:http";
+import path from "node:path";
 import { afterEach, describe, expect, test, vi } from "vitest";
 import { resolveMainSessionKeyFromConfig } from "../config/sessions.js";
-import { drainSystemEvents, peekSystemEvents } from "../infra/system-events.js";
+import {
+  drainSystemEvents,
+  peekSystemEventEntries,
+  peekSystemEvents,
+} from "../infra/system-events.js";
 import { DEDUPE_TTL_MS } from "./server-constants.js";
 import {
   cronIsolatedRun,
@@ -46,25 +50,6 @@ async function postHook(
     method: "POST",
     headers: buildHookJsonHeaders(options),
     body: typeof body === "string" ? body : JSON.stringify(body),
-  });
-}
-
-async function postHookRaw(
-  port: number,
-  path: string,
-  body: string,
-  options?: {
-    token?: string | null;
-    headers?: Record<string, string>;
-  },
-): Promise<Response> {
-  return fetch(`http://127.0.0.1:${port}${path}`, {
-    method: "POST",
-    headers: {
-      ...(options?.token ? { Authorization: `Bearer ${options.token}` } : {}),
-      ...options?.headers,
-    },
-    body,
   });
 }
 
@@ -113,9 +98,41 @@ async function expectFirstHookDelivery(
   const first = await postAgentHookWithIdempotency(port, idempotencyKey, headers);
   const firstBody = (await first.json()) as { runId?: string };
   expect(firstBody.runId).toBeTruthy();
-  await waitForSystemEvent();
+  await waitForSystemEvent(5_000);
   drainSystemEvents(resolveMainKey());
   return firstBody;
+}
+
+async function expectHookAgentSessionRouting(params: {
+  port: number;
+  requestSessionKey: string;
+  expectedSessionKey: string;
+}) {
+  mockIsolatedRunOkOnce();
+
+  const resAgent = await postHook(params.port, "/hooks/agent", {
+    message: "Do it",
+    name: "Email",
+    agentId: "hooks",
+    sessionKey: params.requestSessionKey,
+  });
+  expect(resAgent.status).toBe(200);
+  await waitForSystemEvent();
+
+  const routedCall = (cronIsolatedRun.mock.calls[0] as unknown[] | undefined)?.[0] as
+    | { sessionKey?: string; job?: { agentId?: string } }
+    | undefined;
+  expect(routedCall?.job?.agentId).toBe("hooks");
+  expect(routedCall?.sessionKey).toBe(params.expectedSessionKey);
+  drainSystemEvents(resolveMainKey());
+}
+
+async function writeHookTransformModule(moduleName: string, source: string): Promise<void> {
+  const configPath = process.env.OPENCLAW_CONFIG_PATH;
+  expect(configPath).toBeTruthy();
+  const transformsDir = path.join(path.dirname(configPath!), "hooks", "transforms");
+  await fs.mkdir(transformsDir, { recursive: true });
+  await fs.writeFile(path.join(transformsDir, moduleName), source, "utf-8");
 }
 
 describe("gateway server hooks", () => {
@@ -138,9 +155,9 @@ describe("gateway server hooks", () => {
       const agentEvents = await waitForSystemEvent();
       expect(agentEvents.some((e) => e.includes("Hook Email: done"))).toBe(true);
       const firstCall = (cronIsolatedRun.mock.calls[0] as unknown[] | undefined)?.[0] as {
-        deliveryContract?: string;
+        job?: { payload?: { externalContentSource?: string } };
       };
-      expect(firstCall?.deliveryContract).toBe("shared");
+      expect(firstCall?.job?.payload?.externalContentSource).toBe("webhook");
       drainSystemEvents(resolveMainKey());
 
       mockIsolatedRunOkOnce();
@@ -228,188 +245,78 @@ describe("gateway server hooks", () => {
     });
   });
 
-  test("accepts unauthenticated formspree webhook payloads and routes them to ops", async () => {
+  test("preserves mapped hook provenance across async dispatch", async () => {
     testState.hooksConfig = {
       enabled: true,
       token: HOOK_TOKEN,
-      allowedAgentIds: ["ops", "main"],
-      defaultSessionKey: "hook:visitor-intake",
-      allowedSessionKeyPrefixes: ["hook:"],
+      mappings: [
+        {
+          match: { path: "gmail" },
+          action: "agent",
+          messageTemplate: "New email from {{messages[0].from}}",
+          sessionKey: "main",
+        },
+      ],
     };
-    testState.agentsConfig = {
-      list: [{ id: "main", default: true }, { id: "ops" }],
-    };
+    setMainAndHooksAgents();
+
     await withGatewayServer(async ({ port }) => {
-      cronIsolatedRun.mockClear();
-      cronIsolatedRun.mockResolvedValue({ status: "ok", summary: "done" });
-
-      const jsonRes = await fetch(`http://127.0.0.1:${port}/hooks/formspree`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: "person@example.com",
-          company: "Deepnoa",
-          phone: "03-0000-0000",
-          service: "AI Agent導入支援",
-          subject: "資料請求",
-          message: "資料をお願いします",
-        }),
+      mockIsolatedRunOkOnce();
+      const response = await postHook(port, "/hooks/gmail", {
+        source: "gmail",
+        messages: [{ id: "msg-1", from: "Ada", subject: "Hello", snippet: "Hi", body: "Body" }],
       });
-      expect(jsonRes.status).toBe(200);
-      const jsonBody = (await jsonRes.json()) as {
-        event?: { type?: string; category?: string };
-        intakeSession?: {
-          routing?: { service?: string };
-          contact?: { has_company?: boolean; has_phone?: boolean; has_message?: boolean };
-        };
-        visibleSessionKey?: string;
+      expect(response.status).toBe(200);
+      await expect
+        .poll(() => cronIsolatedRun.mock.calls.length, { timeout: 2_000, interval: 10 })
+        .toBe(1);
+
+      const call = (cronIsolatedRun.mock.calls[0] as unknown[] | undefined)?.[0] as {
+        sessionKey?: string;
+        job?: { payload?: { externalContentSource?: string } };
       };
-      expect(jsonBody.event?.type).toBe("visitor.inquiry.detected");
-      expect(jsonBody.event?.category).toBe("document_request");
-      expect(jsonBody.intakeSession?.routing?.service).toBe("AI Agent導入支援");
-      expect(jsonBody.intakeSession?.contact?.has_company).toBe(true);
-      expect(jsonBody.intakeSession?.contact?.has_phone).toBe(true);
-      expect(jsonBody.intakeSession?.contact?.has_message).toBe(true);
-      expect((jsonBody as { visibleSessionKey?: string }).visibleSessionKey).toMatch(
-        /^hook:formspree:[0-9a-f]{12}$/,
-      );
-      await waitForSystemEvent();
-      expect(cronIsolatedRun).toHaveBeenCalledTimes(2);
-      const calls = cronIsolatedRun.mock.calls.map(
-        (call) =>
-          call[0] as {
-            sessionKey?: string;
-            job?: {
-              agentId?: string;
-              payload?: { message?: string; channel?: string; deliver?: boolean };
-            };
-          },
-      );
-      const visibleCall = calls.find((call) => call.job?.agentId === "main");
-      const opsCall = calls.find((call) => call.job?.agentId === "ops");
-      expect(visibleCall?.sessionKey).toMatch(/^hook:formspree:[0-9a-f]{12}$/);
-      expect(visibleCall?.job?.payload?.channel).toBe("webchat");
-      expect(visibleCall?.job?.payload?.deliver).toBe(false);
-      expect(visibleCall?.job?.payload?.message).toContain("visitor.inquiry.detected");
-      expect(visibleCall?.job?.payload?.message).toContain("has_message=true");
-      expect(visibleCall?.job?.payload?.message).not.toContain("company=Deepnoa");
-      expect(visibleCall?.job?.payload?.message).not.toContain("person@example.com");
-      const jsonCall = opsCall as
-        | { job?: { agentId?: string; payload?: { message?: string } } }
-        | undefined;
-      expect(jsonCall?.job?.agentId).toBe("ops");
-      expect(jsonCall?.job?.payload?.message).toContain("visitor.inquiry.detected");
-      expect(jsonCall?.job?.payload?.message).toContain("service=AI Agent導入支援");
-      expect(jsonCall?.job?.payload?.message).toContain("company=Deepnoa");
+      expect(call?.sessionKey).toBe("main");
+      expect(call?.job?.payload?.externalContentSource).toBe("gmail");
       drainSystemEvents(resolveMainKey());
-
-      cronIsolatedRun.mockClear();
-      cronIsolatedRun.mockResolvedValue({ status: "ok", summary: "done" });
-      const boundary = "----OpenClawFormspreeBoundary";
-      const multipartBody = [
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="email"',
-        "",
-        "person@example.com",
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="message"',
-        "",
-        "営業のご連絡です",
-        `--${boundary}--`,
-        "",
-      ].join("\r\n");
-      const multipartRes = await postHookRaw(port, "/hooks/formspree", multipartBody, {
-        headers: { "Content-Type": `multipart/form-data; boundary=${boundary}` },
-      });
-      expect(multipartRes.status).toBe(200);
-      const multipartJson = (await multipartRes.json()) as { event?: { category?: string } };
-      expect(multipartJson.event?.category).toBe("sales");
     });
   });
 
-  test("syncs a public-safe Formspree intake marker to Office UI", async () => {
+  test("queues direct and mapped wake payloads as untrusted system events", async () => {
     testState.hooksConfig = {
       enabled: true,
       token: HOOK_TOKEN,
-      allowedAgentIds: ["ops", "main"],
-      defaultSessionKey: "hook:visitor-intake",
-      allowedSessionKeyPrefixes: ["hook:"],
-    };
-    testState.agentsConfig = {
-      list: [{ id: "main", default: true }, { id: "ops" }],
+      mappings: [
+        {
+          match: { path: "mapped-wake" },
+          action: "wake",
+          textTemplate: "Mapped wake: {{payload.subject}}",
+        },
+      ],
     };
 
-    let capturedBody = "";
-    const sink = createHttpServer((req, res) => {
-      let body = "";
-      req.setEncoding("utf8");
-      req.on("data", (chunk) => {
-        body += chunk;
-      });
-      req.on("end", () => {
-        capturedBody = body;
-        res.statusCode = 200;
-        res.setHeader("Content-Type", "application/json; charset=utf-8");
-        res.end(JSON.stringify({ ok: true }));
-      });
+    await withGatewayServer(async ({ port }) => {
+      const direct = await postHook(port, "/hooks/wake", { text: "Direct wake" });
+      expect(direct.status).toBe(200);
+      await waitForSystemEvent(5_000);
+      expect(peekSystemEventEntries(resolveMainKey())).toEqual([
+        expect.objectContaining({
+          text: "Direct wake",
+          trusted: false,
+        }),
+      ]);
+      drainSystemEvents(resolveMainKey());
+
+      const mapped = await postHook(port, "/hooks/mapped-wake", { subject: "Email" });
+      expect(mapped.status).toBe(200);
+      await waitForSystemEvent(5_000);
+      expect(peekSystemEventEntries(resolveMainKey())).toEqual([
+        expect.objectContaining({
+          text: "Mapped wake: Email",
+          trusted: false,
+        }),
+      ]);
+      drainSystemEvents(resolveMainKey());
     });
-
-    const previousUrl = process.env.OFFICE_UI_INTAKE_URL;
-    await new Promise<void>((resolve) => sink.listen(0, "127.0.0.1", () => resolve()));
-    const address = sink.address();
-    if (!address || typeof address === "string") {
-      throw new Error("expected TCP listener address");
-    }
-    process.env.OFFICE_UI_INTAKE_URL = `http://127.0.0.1:${address.port}/gateway/intake`;
-
-    try {
-      await withGatewayServer(async ({ port }) => {
-        mockIsolatedRunOk();
-        const response = await fetch(`http://127.0.0.1:${port}/hooks/formspree`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            email: "person@example.com",
-            company: "Deepnoa",
-            phone: "03-0000-0000",
-            service: "AI Agent導入支援",
-            subject: "資料請求",
-            message: "資料をお願いします",
-          }),
-        });
-        expect(response.status).toBe(200);
-      });
-    } finally {
-      await new Promise<void>((resolve, reject) =>
-        sink.close((error) => (error ? reject(error) : resolve())),
-      );
-      if (previousUrl === undefined) {
-        delete process.env.OFFICE_UI_INTAKE_URL;
-      } else {
-        process.env.OFFICE_UI_INTAKE_URL = previousUrl;
-      }
-    }
-
-    expect(capturedBody).toBeTruthy();
-    const payload = JSON.parse(capturedBody) as Record<string, unknown>;
-    expect(payload.type).toBe("visitor.inquiry.detected");
-    expect(payload.source).toBe("formspree");
-    expect(payload.category).toBe("document_request");
-    expect(payload.service).toBe("AI Agent導入支援");
-    expect(payload.has_email).toBe(true);
-    expect(payload.has_company).toBe(true);
-    expect(payload.has_phone).toBe(true);
-    expect(payload.has_message).toBe(true);
-    expect(payload.summary).toBe("Formspree inquiry detected");
-    expect(payload.raw_details_hidden).toBe(true);
-    expect(payload.name).toBe("Formspree intake");
-    const safeMessage = typeof payload.message === "string" ? payload.message : "";
-    expect(safeMessage).toContain("raw_details_hidden=true");
-    expect(safeMessage).not.toContain("person@example.com");
-    expect(safeMessage).not.toContain("03-0000-0000");
-    expect(safeMessage).not.toContain("資料をお願いします");
-    expect(payload).not.toHaveProperty("email");
-    expect(payload).not.toHaveProperty("phone");
   });
 
   test("rejects request sessionKey unless hooks.allowRequestSessionKey is enabled", async () => {
@@ -496,7 +403,90 @@ describe("gateway server hooks", () => {
     });
   });
 
-  test("normalizes duplicate target-agent prefixes before isolated dispatch", async () => {
+  test("enforces templated vs static mapping session keys on /hooks/<mapping>", async () => {
+    testState.hooksConfig = {
+      enabled: true,
+      token: HOOK_TOKEN,
+      allowedSessionKeyPrefixes: ["hook:", "hook:gmail:"],
+      mappings: [
+        {
+          match: { path: "mapped-templated" },
+          action: "agent",
+          messageTemplate: "Mapped: {{payload.subject}}",
+          sessionKey: "hook:gmail:{{payload.id}}",
+        },
+        {
+          match: { path: "mapped-static" },
+          action: "agent",
+          messageTemplate: "Mapped: {{payload.subject}}",
+          sessionKey: "hook:gmail:fixed",
+        },
+      ],
+    };
+
+    await withGatewayServer(async ({ port }) => {
+      const templated = await postHook(port, "/hooks/mapped-templated", {
+        subject: "hello",
+        id: "42",
+      });
+      expect(templated.status).toBe(400);
+      const templatedBody = (await templated.json()) as { error?: string };
+      expect(templatedBody.error).toContain("hooks.allowRequestSessionKey");
+      expect(cronIsolatedRun).not.toHaveBeenCalled();
+
+      mockIsolatedRunOkOnce();
+      const staticMapped = await postHook(port, "/hooks/mapped-static", {
+        subject: "hello",
+      });
+      expect(staticMapped.status).toBe(200);
+      await waitForSystemEvent();
+      const staticCall = (cronIsolatedRun.mock.calls[0] as unknown[] | undefined)?.[0] as
+        | { sessionKey?: string }
+        | undefined;
+      expect(staticCall?.sessionKey).toBe("hook:gmail:fixed");
+      drainSystemEvents(resolveMainKey());
+    });
+  });
+
+  test("treats malformed transform sessionKeySource as templated on /hooks/<mapping>", async () => {
+    await writeHookTransformModule(
+      "mapped-invalid-session-key-source.mjs",
+      [
+        "export default () => ({",
+        '  kind: "agent",',
+        '  message: "Mapped: from transform",',
+        '  sessionKey: "hook:gmail:from-transform",',
+        '  sessionKeySource: "bogus",',
+        "});",
+      ].join("\n"),
+    );
+
+    testState.hooksConfig = {
+      enabled: true,
+      token: HOOK_TOKEN,
+      allowedSessionKeyPrefixes: ["hook:", "hook:gmail:"],
+      mappings: [
+        {
+          match: { path: "mapped-invalid-session-key-source" },
+          action: "agent",
+          messageTemplate: "Mapped: {{payload.subject}}",
+          transform: { module: "mapped-invalid-session-key-source.mjs" },
+        },
+      ],
+    };
+
+    await withGatewayServer(async ({ port }) => {
+      const response = await postHook(port, "/hooks/mapped-invalid-session-key-source", {
+        subject: "hello",
+      });
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error?: string };
+      expect(body.error).toContain("hooks.allowRequestSessionKey");
+      expect(cronIsolatedRun).not.toHaveBeenCalled();
+    });
+  });
+
+  test("preserves target-agent prefixes before isolated dispatch", async () => {
     testState.hooksConfig = {
       enabled: true,
       token: HOOK_TOKEN,
@@ -505,23 +495,76 @@ describe("gateway server hooks", () => {
     };
     setMainAndHooksAgents();
     await withGatewayServer(async ({ port }) => {
-      mockIsolatedRunOkOnce();
+      await expectHookAgentSessionRouting({
+        port,
+        requestSessionKey: "agent:hooks:slack:channel:c123",
+        expectedSessionKey: "agent:hooks:slack:channel:c123",
+      });
+    });
+  });
 
-      const resAgent = await postHook(port, "/hooks/agent", {
+  test("rebinds mismatched agent prefixes to the hook target before isolated dispatch", async () => {
+    testState.hooksConfig = {
+      enabled: true,
+      token: HOOK_TOKEN,
+      allowRequestSessionKey: true,
+      allowedSessionKeyPrefixes: ["hook:", "agent:"],
+    };
+    setMainAndHooksAgents();
+    await withGatewayServer(async ({ port }) => {
+      await expectHookAgentSessionRouting({
+        port,
+        requestSessionKey: "agent:main:slack:channel:c123",
+        expectedSessionKey: "agent:hooks:slack:channel:c123",
+      });
+    });
+  });
+
+  test("rejects rebinding into a session namespace that is not allowlisted", async () => {
+    testState.hooksConfig = {
+      enabled: true,
+      token: HOOK_TOKEN,
+      allowRequestSessionKey: true,
+      allowedSessionKeyPrefixes: ["hook:", "agent:main:"],
+    };
+    setMainAndHooksAgents();
+    await withGatewayServer(async ({ port }) => {
+      const denied = await postHook(port, "/hooks/agent", {
         message: "Do it",
         name: "Email",
         agentId: "hooks",
-        sessionKey: "agent:hooks:slack:channel:c123",
+        sessionKey: "agent:main:slack:channel:c123",
       });
-      expect(resAgent.status).toBe(200);
-      await waitForSystemEvent();
+      expect(denied.status).toBe(400);
+      const body = (await denied.json()) as { error?: string };
+      expect(body.error).toContain("sessionKey must start with one of");
+      expect(cronIsolatedRun).not.toHaveBeenCalled();
+    });
+  });
 
-      const routedCall = (cronIsolatedRun.mock.calls[0] as unknown[] | undefined)?.[0] as
-        | { sessionKey?: string; job?: { agentId?: string } }
-        | undefined;
-      expect(routedCall?.job?.agentId).toBe("hooks");
-      expect(routedCall?.sessionKey).toBe("slack:channel:c123");
-      drainSystemEvents(resolveMainKey());
+  test("rejects mapped hook session rebinding into a disallowed target-agent prefix", async () => {
+    testState.hooksConfig = {
+      enabled: true,
+      token: HOOK_TOKEN,
+      allowRequestSessionKey: true,
+      allowedSessionKeyPrefixes: ["hook:", "agent:main:"],
+      mappings: [
+        {
+          match: { path: "mapped-rebind-denied" },
+          action: "agent",
+          agentId: "hooks",
+          messageTemplate: "Mapped: {{payload.subject}}",
+          sessionKey: "agent:main:slack:channel:c123",
+        },
+      ],
+    };
+    setMainAndHooksAgents();
+    await withGatewayServer(async ({ port }) => {
+      const denied = await postHook(port, "/hooks/mapped-rebind-denied", { subject: "hello" });
+      expect(denied.status).toBe(400);
+      const body = (await denied.json()) as { error?: string };
+      expect(body.error).toContain("sessionKey must start with one of");
+      expect(cronIsolatedRun).not.toHaveBeenCalled();
     });
   });
 
@@ -580,32 +623,43 @@ describe("gateway server hooks", () => {
 
   test("expires hook idempotency entries from first delivery time", async () => {
     testState.hooksConfig = { enabled: true, token: HOOK_TOKEN };
-    const nowSpy = vi.spyOn(Date, "now");
-    nowSpy.mockReturnValue(1_000_000);
 
     await withGatewayServer(async ({ port }) => {
       mockIsolatedRunOk();
-      const firstBody = await expectFirstHookDelivery(port, "fixed-window-idem");
 
-      nowSpy.mockReturnValue(1_000_000 + DEDUPE_TTL_MS - 1);
+      const firstNowSpy = vi.spyOn(Date, "now");
+      firstNowSpy.mockReturnValue(1_000_000);
+      const first = await postAgentHookWithIdempotency(port, "fixed-window-idem");
+      firstNowSpy.mockRestore();
+
+      const firstBody = (await first.json()) as { runId?: string };
+      expect(firstBody.runId).toBeTruthy();
+      await waitForSystemEvent();
+      drainSystemEvents(resolveMainKey());
+
+      const secondNowSpy = vi.spyOn(Date, "now");
+      secondNowSpy.mockReturnValue(1_000_000 + DEDUPE_TTL_MS - 1);
       const second = await postHook(
         port,
         "/hooks/agent",
         { message: "Do it", name: "Email" },
         { headers: { "Idempotency-Key": "fixed-window-idem" } },
       );
+      secondNowSpy.mockRestore();
       expect(second.status).toBe(200);
       const secondBody = (await second.json()) as { runId?: string };
       expect(secondBody.runId).toBe(firstBody.runId);
       expect(cronIsolatedRun).toHaveBeenCalledTimes(1);
 
-      nowSpy.mockReturnValue(1_000_000 + DEDUPE_TTL_MS + 1);
+      const thirdNowSpy = vi.spyOn(Date, "now");
+      thirdNowSpy.mockReturnValue(1_000_000 + DEDUPE_TTL_MS + 1);
       const third = await postHook(
         port,
         "/hooks/agent",
         { message: "Do it", name: "Email" },
         { headers: { "Idempotency-Key": "fixed-window-idem" } },
       );
+      thirdNowSpy.mockRestore();
       expect(third.status).toBe(200);
       const thirdBody = (await third.json()) as { runId?: string };
       expect(thirdBody.runId).toBeTruthy();
