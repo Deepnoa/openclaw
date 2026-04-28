@@ -23,7 +23,7 @@ from scripts.runtime.contract.runtime_contract import (
     STATUS_RUNNING,
     STATUS_UNKNOWN,
 )
-from scripts.runtime.ollama_health import check_ollama_health
+from scripts.runtime.adapter.ollama_health import check_ollama_health
 from scripts.runtime.queue.runtime_queue import load_queue_items, now_iso, write_queue_items
 from scripts.runtime.runtime_event_logger import log_runtime_event
 from scripts.runtime.runtime_runner import run_runtime

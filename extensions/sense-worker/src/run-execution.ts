@@ -37,7 +37,7 @@ type BridgeRunResult = {
 
 const BRIDGE_SCRIPT_PATH = path.resolve(
   path.dirname(fileURLToPath(import.meta.url)),
-  "../../../scripts/runtime/sense_runtime_manager_task.py",
+  "../../../scripts/runtime/adapter/sense_runtime_manager_task.py",
 );
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
