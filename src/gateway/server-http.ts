@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
+import { appendFile, mkdir } from "node:fs/promises";
 import {
   createServer as createHttpServer,
   type Server as HttpServer,
@@ -7,6 +8,7 @@ import {
   type ServerResponse,
 } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
+import { dirname } from "node:path";
 import type { TlsOptions } from "node:tls";
 import type { WebSocketServer } from "ws";
 import { resolveAgentAvatar } from "../agents/identity-avatar.js";
@@ -121,7 +123,12 @@ const GATEWAY_PROBE_STATUS_BY_PATH = new Map<string, "live" | "ready">([
 ]);
 const MATTERMOST_SLASH_CALLBACK_PATH = "/api/channels/mattermost/command";
 const DEFAULT_OFFICE_UI_INTAKE_URL = "http://127.0.0.1:19000/gateway/intake";
+const DEFAULT_OLLAMA_URL = "http://192.168.11.11:11434";
 const OFFICE_UI_INTAKE_TIMEOUT_MS = 2500;
+const OLLAMA_HEALTH_TIMEOUT_MS = 2500;
+const DOCUMENT_REQUEST_QUEUE_PATH = `${process.cwd()}/runs/queued-runtime-tasks.jsonl`;
+const RUNTIME_EVENTS_PATH = `${process.cwd()}/runs/runtime-events.jsonl`;
+const DOCUMENT_REQUEST_MAX_ATTEMPTS = 5;
 const DOCUMENT_REQUEST_RUNTIME_GOAL = "Generate a reply email for a document request";
 const DOCUMENT_REQUEST_RUNTIME_CONSTRAINTS = [
   "Do not include sensitive data",
@@ -131,6 +138,117 @@ const DOCUMENT_REQUEST_RUNTIME_CONSTRAINTS = [
 function resolveOfficeUiIntakeUrl(): string {
   const configured = process.env.OFFICE_UI_INTAKE_URL?.trim();
   return configured || DEFAULT_OFFICE_UI_INTAKE_URL;
+}
+
+function resolveOllamaBaseUrl(): string {
+  const configured =
+    process.env.OLLAMA_URL?.trim() ||
+    process.env.OLLAMA_BASE_URL?.trim() ||
+    process.env.OLLAMA_HOST?.trim();
+  return configured || DEFAULT_OLLAMA_URL;
+}
+
+function buildDocumentRequestRuntimeTaskId(inquiryId: string): string {
+  return `docreq-${inquiryId}`;
+}
+
+function buildDocumentRequestRuntimePayload(
+  session: ReturnType<typeof buildFormspreeIntakeSession>,
+) {
+  return {
+    goal: DOCUMENT_REQUEST_RUNTIME_GOAL,
+    context: {
+      category: session.public_event.category,
+      service: session.routing.service?.trim() || "other",
+    },
+    constraints: DOCUMENT_REQUEST_RUNTIME_CONSTRAINTS,
+  };
+}
+
+async function appendJsonlRecord(path: string, value: unknown): Promise<void> {
+  await mkdir(dirname(path), { recursive: true });
+  await appendFile(path, `${JSON.stringify(value)}\n`, "utf8");
+}
+
+async function appendRuntimeEvent(event: {
+  component: string;
+  event_type: string;
+  task_id?: string;
+  role?: string;
+  status?: string;
+  exit_code?: number | null;
+  runtime_status?: string | null;
+  route_reason?: string | null;
+}): Promise<void> {
+  await appendJsonlRecord(RUNTIME_EVENTS_PATH, {
+    timestamp: new Date().toISOString(),
+    component: event.component,
+    event_type: event.event_type,
+    task_id: event.task_id ?? null,
+    role: event.role ?? null,
+    status: event.status ?? null,
+    exit_code: event.exit_code ?? null,
+    runtime_status: event.runtime_status ?? null,
+    route_reason: event.route_reason ?? null,
+  });
+}
+
+async function enqueueDocumentRequestRuntimeTask(params: {
+  taskId: string;
+  session: ReturnType<typeof buildFormspreeIntakeSession>;
+  reason: string;
+  logHooks: SubsystemLogger;
+}): Promise<void> {
+  const now = new Date().toISOString();
+  const entry = {
+    task_id: params.taskId,
+    role: "dev",
+    task_type: "document_request_reply_draft",
+    status: "queued",
+    reason: params.reason,
+    created_at: now,
+    updated_at: now,
+    attempts: 0,
+    max_attempts: DOCUMENT_REQUEST_MAX_ATTEMPTS,
+    payload: buildDocumentRequestRuntimePayload(params.session),
+  };
+  await appendJsonlRecord(DOCUMENT_REQUEST_QUEUE_PATH, entry);
+  await appendRuntimeEvent({
+    component: "runtime",
+    event_type: "runtime.queued",
+    task_id: params.taskId,
+    role: "dev",
+    status: "queued",
+    exit_code: null,
+    runtime_status: "queued",
+    route_reason: params.reason,
+  });
+  params.logHooks.info?.(
+    `[document-request-runtime] queued task_id=${params.taskId} reason=${params.reason}`,
+  );
+}
+
+async function checkOllamaHealth(): Promise<{ online: boolean; reason: string; url: string }> {
+  const url = `${resolveOllamaBaseUrl().replace(/\/+$/, "")}/api/tags`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OLLAMA_HEALTH_TIMEOUT_MS);
+  try {
+    const response = await fetch(url, { method: "GET", signal: controller.signal });
+    if (response.ok) {
+      return { online: true, reason: `http_${response.status}`, url };
+    }
+    return { online: false, reason: `http_${response.status}`, url };
+  } catch (error) {
+    const reason =
+      error instanceof Error && error.name === "AbortError"
+        ? "timeout"
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    return { online: false, reason, url };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 async function syncOfficeUiIntake(
@@ -177,25 +295,43 @@ function shouldLaunchDocumentRequestRuntime(
   return session.public_event.category === "document_request";
 }
 
-function buildDocumentRequestRuntimeTaskId(inquiryId: string): string {
-  return `docreq-${inquiryId}`;
-}
-
-function launchDocumentRequestRuntime(
+async function launchDocumentRequestRuntime(
   session: ReturnType<typeof buildFormspreeIntakeSession>,
   inquiryId: string,
   logHooks: SubsystemLogger,
-): string {
+): Promise<string> {
   const taskId = buildDocumentRequestRuntimeTaskId(inquiryId);
+  const health = await checkOllamaHealth();
+  if (!health.online) {
+    await appendRuntimeEvent({
+      component: "runtime",
+      event_type: "runtime.offline",
+      task_id: taskId,
+      role: "dev",
+      status: "offline",
+      exit_code: null,
+      runtime_status: "offline",
+      route_reason: `sense_offline:${health.reason}`,
+    });
+    logHooks.warn(
+      `[document-request-runtime] task_id=${taskId} offline url=${health.url} reason=${health.reason}`,
+    );
+    await enqueueDocumentRequestRuntimeTask({
+      taskId,
+      session,
+      reason: "sense_offline",
+      logHooks,
+    });
+    return taskId;
+  }
+
   const scriptPath = `${process.cwd()}/scripts/runtime/sense-runtime-manager-task.sh`;
+  const runtimePayload = buildDocumentRequestRuntimePayload(session);
   const params = {
     role: "dev",
     task_id: taskId,
-    context: {
-      category: session.public_event.category,
-      service: session.routing.service?.trim() || "other",
-    },
-    constraints: DOCUMENT_REQUEST_RUNTIME_CONSTRAINTS,
+    context: runtimePayload.context,
+    constraints: runtimePayload.constraints,
   };
   const child = spawn(
     scriptPath,
@@ -203,7 +339,7 @@ function launchDocumentRequestRuntime(
       "--task",
       "reply_draft_document_request",
       "--input",
-      DOCUMENT_REQUEST_RUNTIME_GOAL,
+      runtimePayload.goal,
       "--params-json",
       JSON.stringify(params),
     ],
@@ -237,6 +373,12 @@ function launchDocumentRequestRuntime(
     logHooks.warn(
       `[document-request-runtime] task_id=${taskId} launch failed error=${error.message}`,
     );
+    void enqueueDocumentRequestRuntimeTask({
+      taskId,
+      session,
+      reason: "runtime_launch_error",
+      logHooks,
+    });
   });
   child.on("exit", (code, signal) => {
     logHooks.info?.(
@@ -738,7 +880,7 @@ export function createHooksRequestHandler(
         logHooks.warn(`formspree hook dispatch failed: ${String(err)}`);
       }
       if (shouldLaunchDocumentRequestRuntime(intakeSession)) {
-        runtimeTaskId = launchDocumentRequestRuntime(intakeSession, inquiryId, logHooks);
+        runtimeTaskId = await launchDocumentRequestRuntime(intakeSession, inquiryId, logHooks);
       }
       await syncOfficeUiIntake(intakeSession, logHooks, runtimeTaskId);
       sendJson(res, 200, {

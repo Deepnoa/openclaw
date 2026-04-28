@@ -544,7 +544,7 @@ export function buildOfficeUiIntakePayload(
   };
   if (runtimeTaskId) {
     payload.runtime_task_id = runtimeTaskId;
-    payload.has_reply_draft = true;
+    payload.has_reply_draft = false;
   }
   return payload;
 }
