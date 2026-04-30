@@ -27,6 +27,7 @@ EVENT_RUNTIME_OFFLINE = "runtime.offline"
 EVENT_RUNTIME_RETRY_STARTED = "runtime.retry_started"
 EVENT_RUNTIME_RETRY_COMPLETED = "runtime.retry_completed"
 EVENT_RUNTIME_RETRY_FAILED = "runtime.retry_failed"
+EVENT_RUNTIME_STUCK_WARNING = "runtime.stuck_warning"
 
 
 # Result schema contract
