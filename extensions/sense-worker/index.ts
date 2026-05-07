@@ -1,0 +1,53 @@
+import {
+  definePluginEntry,
+  type AnyAgentTool,
+  type OpenClawPluginApi,
+} from "openclaw/plugin-sdk/core";
+import { handleNemoClawCommand } from "./src/command.js";
+import { handleRunCommand } from "./src/run-command.js";
+import { createSenseWorkerHealthTool, createSenseWorkerTool } from "./src/tool.js";
+
+export default definePluginEntry({
+  id: "sense-worker",
+  name: "Sense Worker",
+  description:
+    "Optional tool for offloading summarize or heavy tasks to a Sense worker node over LAN.",
+  register(api: OpenClawPluginApi) {
+    api.registerCommand({
+      name: "nemoclaw",
+      description: "Show the latest NemoClaw digest summary, recent/failed jobs, or inspect a job.",
+      acceptsArgs: true,
+      handler: async (ctx) => await handleNemoClawCommand(ctx.args, ctx.config),
+    });
+    api.registerCommand({
+      name: "run",
+      description: "Queue an OpenClaw run record for health, digest, or free-text work.",
+      acceptsArgs: true,
+      handler: async (ctx) => await handleRunCommand(ctx),
+    });
+    api.registerCommand({
+      name: "sense-runs",
+      description: "Sense-specific alias for /run to queue an OpenClaw run record.",
+      acceptsArgs: true,
+      handler: async (ctx) => await handleRunCommand(ctx),
+    });
+    api.registerTool(
+      (ctx) => {
+        if (ctx.sandboxed) {
+          return null;
+        }
+        return createSenseWorkerTool(api) as AnyAgentTool;
+      },
+      { optional: true },
+    );
+    api.registerTool(
+      (ctx) => {
+        if (ctx.sandboxed) {
+          return null;
+        }
+        return createSenseWorkerHealthTool(api) as AnyAgentTool;
+      },
+      { optional: true },
+    );
+  },
+});

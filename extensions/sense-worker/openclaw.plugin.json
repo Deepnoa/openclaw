@@ -1,0 +1,24 @@
+{
+  "id": "sense-worker",
+  "name": "Sense Worker",
+  "description": "Optional HTTP tool for offloading tasks to a Sense worker node over LAN.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "baseUrl": { "type": "string" },
+      "timeoutMs": { "type": "number" },
+      "token": { "type": "string" },
+      "tokenEnv": { "type": "string" },
+      "slackNotifyTo": { "type": "string" },
+      "slackNotifyAccountId": { "type": "string" },
+      "slackNotifyEvents": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "enum": ["job_done", "job_failed", "digest_ready"]
+        }
+      }
+    }
+  }
+}
