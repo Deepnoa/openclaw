@@ -68,6 +68,7 @@ let openResponsesHttpModulePromise: Promise<typeof import("./openresponses-http.
 let sessionHistoryHttpModulePromise:
   | Promise<typeof import("./sessions-history-http.js")>
   | undefined;
+let internalStateHttpModulePromise: Promise<typeof import("./internal-state-http.js")> | undefined;
 let sessionKillHttpModulePromise: Promise<typeof import("./session-kill-http.js")> | undefined;
 let toolsInvokeHttpModulePromise: Promise<typeof import("./tools-invoke-http.js")> | undefined;
 let voiceClawRealtimeUpgradeModulePromise:
@@ -117,6 +118,11 @@ function getOpenResponsesHttpModule() {
 function getSessionHistoryHttpModule() {
   sessionHistoryHttpModulePromise ??= import("./sessions-history-http.js");
   return sessionHistoryHttpModulePromise;
+}
+
+function getInternalStateHttpModule() {
+  internalStateHttpModulePromise ??= import("./internal-state-http.js");
+  return internalStateHttpModulePromise;
 }
 
 function getSessionKillHttpModule() {
@@ -675,6 +681,16 @@ export function createGatewayHttpServer(opts: {
             }),
         });
       }
+      requestStages.push({
+        name: "internal-state",
+        run: async () =>
+          (await getInternalStateHttpModule()).handleInternalStateHttpRequest(req, res, {
+            auth: resolvedAuth,
+            trustedProxies,
+            allowRealIpFallback,
+            rateLimiter,
+          }),
+      });
       if (canvasHost) {
         requestStages.push({
           name: "canvas-auth",
