@@ -30,8 +30,8 @@ import {
   normalizeHookDispatchSessionKey,
   normalizeHookHeaders,
   normalizeWakePayload,
-  readJsonBody,
   readHookBody,
+  readJsonBody,
   resolveHookChannel,
   resolveHookDeliver,
   resolveHookIdempotencyKey,
@@ -159,14 +159,14 @@ async function appendRuntimeEvent(event: {
   });
 }
 
-async function enqueueDocumentRequestRuntimeTask(params: {
+function buildDocumentRequestRuntimeQueueEntry(params: {
   taskId: string;
   session: ReturnType<typeof buildFormspreeIntakeSession>;
   reason: string;
-  logHooks: SubsystemLogger;
-}): Promise<void> {
+  attempts?: number;
+}) {
   const now = new Date().toISOString();
-  const entry = {
+  return {
     task_id: params.taskId,
     role: "dev",
     task_type: "document_request_reply_draft",
@@ -174,10 +174,21 @@ async function enqueueDocumentRequestRuntimeTask(params: {
     reason: params.reason,
     created_at: now,
     updated_at: now,
-    attempts: 0,
+    attempts: Math.max(params.attempts ?? 0, 0),
     max_attempts: DOCUMENT_REQUEST_MAX_ATTEMPTS,
     payload: buildDocumentRequestRuntimePayload(params.session),
   };
+}
+
+async function enqueueDocumentRequestRuntimeTask(params: {
+  taskId: string;
+  session: ReturnType<typeof buildFormspreeIntakeSession>;
+  reason: string;
+  logHooks: SubsystemLogger;
+  attempts?: number;
+  extraEventType?: string;
+}): Promise<void> {
+  const entry = buildDocumentRequestRuntimeQueueEntry(params);
   await appendJsonlRecord(DOCUMENT_REQUEST_QUEUE_PATH, entry);
   await appendRuntimeEvent({
     component: "runtime",
@@ -189,8 +200,20 @@ async function enqueueDocumentRequestRuntimeTask(params: {
     runtime_status: "queued",
     route_reason: params.reason,
   });
+  if (params.extraEventType) {
+    await appendRuntimeEvent({
+      component: "runtime",
+      event_type: params.extraEventType,
+      task_id: params.taskId,
+      role: "dev",
+      status: "queued",
+      exit_code: null,
+      runtime_status: "queued",
+      route_reason: params.reason,
+    });
+  }
   params.logHooks.info?.(
-    `[document-request-runtime] queued task_id=${params.taskId} reason=${params.reason}`,
+    `[document-request-runtime] queued task_id=${params.taskId} reason=${params.reason} attempts=${entry.attempts}`,
   );
 }
 
@@ -315,8 +338,75 @@ async function launchDocumentRequestRuntime(
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
+  let terminalHandled = false;
+  const enqueueLostTask = (reason: string, exitCode: number | null, signal?: string | null) => {
+    if (terminalHandled) return;
+    terminalHandled = true;
+    void (async () => {
+      await appendRuntimeEvent({
+        component: "runtime",
+        event_type: "runtime.exit",
+        task_id: taskId,
+        role: "dev",
+        status: "failed",
+        exit_code: exitCode,
+        runtime_status: "failed",
+        route_reason: signal ? `${reason}:signal:${signal}` : reason,
+      });
+      await appendRuntimeEvent({
+        component: "runtime",
+        event_type: "runtime.failed",
+        task_id: taskId,
+        role: "dev",
+        status: "failed",
+        exit_code: exitCode,
+        runtime_status: "failed",
+        route_reason: signal ? `${reason}:signal:${signal}` : reason,
+      });
+      await enqueueDocumentRequestRuntimeTask({
+        taskId,
+        session,
+        reason,
+        logHooks,
+        attempts: 1,
+        extraEventType: "runtime.requeued",
+      });
+    })().catch((error) => {
+      logHooks.warn(
+        `[document-request-runtime] task_id=${taskId} requeue failed error=${String(error)}`,
+      );
+    });
+  };
   child.stdout.setEncoding("utf8");
   child.stderr.setEncoding("utf8");
+  child.on("spawn", () => {
+    void (async () => {
+      await appendRuntimeEvent({
+        component: "runtime",
+        event_type: "runtime.spawned",
+        task_id: taskId,
+        role: "dev",
+        status: "running",
+        exit_code: null,
+        runtime_status: "running",
+        route_reason: null,
+      });
+      await appendRuntimeEvent({
+        component: "runtime",
+        event_type: "runtime.started",
+        task_id: taskId,
+        role: "dev",
+        status: "running",
+        exit_code: null,
+        runtime_status: "running",
+        route_reason: null,
+      });
+    })().catch((error) => {
+      logHooks.warn(
+        `[document-request-runtime] task_id=${taskId} spawn event failed error=${String(error)}`,
+      );
+    });
+  });
   child.stdout.on("data", (chunk) => {
     const lines = String(chunk)
       .split(/\r?\n/)
@@ -339,17 +429,34 @@ async function launchDocumentRequestRuntime(
     logHooks.warn(
       `[document-request-runtime] task_id=${taskId} launch failed error=${error.message}`,
     );
-    void enqueueDocumentRequestRuntimeTask({
-      taskId,
-      session,
-      reason: "runtime_launch_error",
-      logHooks,
-    });
+    enqueueLostTask("runtime_launch_error", null, null);
   });
   child.on("exit", (code, signal) => {
     logHooks.info?.(
       `[document-request-runtime] task_id=${taskId} exit_code=${code ?? -1} signal=${signal ?? "-"}`,
     );
+    if ((code ?? 0) !== 0) {
+      enqueueLostTask("runtime_exit_nonzero", code ?? null, signal);
+      return;
+    }
+    if (terminalHandled) {
+      return;
+    }
+    terminalHandled = true;
+    void appendRuntimeEvent({
+      component: "runtime",
+      event_type: "runtime.exit",
+      task_id: taskId,
+      role: "dev",
+      status: "completed",
+      exit_code: code ?? 0,
+      runtime_status: "completed",
+      route_reason: signal ? `signal:${signal}` : null,
+    }).catch((error) => {
+      logHooks.warn(
+        `[document-request-runtime] task_id=${taskId} exit event failed error=${String(error)}`,
+      );
+    });
   });
   logHooks.info?.(
     `[document-request-runtime] launched task_id=${taskId} category=${session.public_event.category}`,
@@ -508,9 +615,9 @@ export function createHooksRequestHandler(
     }
     hookAuthLimiter.reset(clientKey, AUTH_RATE_LIMIT_SCOPE_HOOK_AUTH);
 
-    const body = isFormspreeHook
-      ? await readHookBody(req, hooksConfig.maxBodyBytes)
-      : await readJsonBody(req, hooksConfig.maxBodyBytes);
+    const body = await (isFormspreeHook
+      ? readHookBody(req, hooksConfig.maxBodyBytes)
+      : readJsonBody(req, hooksConfig.maxBodyBytes));
     if (!body.ok) {
       const status =
         body.error === "payload too large"
@@ -563,33 +670,34 @@ export function createHooksRequestHandler(
                 sessionKey: visibleSessionKey.value,
                 targetAgentId: mainAgentId,
               }),
-              deliver: false,
-              channel: "webchat",
-              timeoutSeconds: 20,
-              externalContentSource: "webhook",
-            });
-          }
-          const opsSessionKey = resolveHookSessionKey({
-            hooksConfig,
-            source: "mapping-static",
-            sessionKey: `${visibleSessionKey.value}:ops`,
-          });
-          const targetAgentId = resolveHookTargetAgentId(hooksConfig, "ops");
-          if (opsSessionKey.ok && isHookAgentAllowed(hooksConfig, targetAgentId)) {
-            runId = dispatchAgentHook({
-              message: buildFormspreeOpsHookMessage(intakeSession),
-              name: "Formspree Intake",
-              agentId: targetAgentId,
-              wakeMode: "now",
-              sessionKey: normalizeHookDispatchSessionKey({
-                sessionKey: opsSessionKey.value,
-                targetAgentId,
-              }),
-              deliver: false,
+              sourcePath: `${basePath}/formspree`,
+              deliver: true,
               channel: "last",
               externalContentSource: "webhook",
             });
           }
+        }
+        const opsSessionKey = resolveHookSessionKey({
+          hooksConfig,
+          source: "mapping-static",
+          sessionKey: `hook:ops:formspree:${inquiryId}`,
+        });
+        const targetAgentId = resolveHookTargetAgentId(hooksConfig, "ops");
+        if (opsSessionKey.ok && isHookAgentAllowed(hooksConfig, targetAgentId)) {
+          runId = dispatchAgentHook({
+            message: buildFormspreeOpsHookMessage(intakeSession),
+            name: "Formspree Intake",
+            agentId: targetAgentId,
+            wakeMode: "now",
+            sessionKey: normalizeHookDispatchSessionKey({
+              sessionKey: opsSessionKey.value,
+              targetAgentId,
+            }),
+            sourcePath: `${basePath}/formspree`,
+            deliver: true,
+            channel: "last",
+            externalContentSource: "webhook",
+          });
         }
       } catch (err) {
         logHooks.warn(`formspree hook dispatch failed: ${String(err)}`);
@@ -682,6 +790,7 @@ export function createHooksRequestHandler(
         ...normalized.value,
         idempotencyKey,
         sessionKey: normalizedDispatchSessionKey,
+        sourcePath: `${basePath}/agent`,
         agentId: targetAgentId,
         externalContentSource: "webhook",
       });
@@ -779,6 +888,7 @@ export function createHooksRequestHandler(
             agentId: targetAgentId,
             wakeMode: mapped.action.wakeMode,
             sessionKey: normalizedDispatchSessionKey,
+            sourcePath: `${basePath}/${subPath}`,
             deliver: resolveHookDeliver(mapped.action.deliver),
             channel,
             to: mapped.action.to,

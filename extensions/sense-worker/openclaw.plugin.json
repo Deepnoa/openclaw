@@ -2,6 +2,17 @@
   "id": "sense-worker",
   "name": "Sense Worker",
   "description": "Optional HTTP tool for offloading tasks to a Sense worker node over LAN.",
+  "contracts": {
+    "tools": ["sense-worker", "sense-worker-health"]
+  },
+  "toolMetadata": {
+    "sense-worker": {
+      "optional": true
+    },
+    "sense-worker-health": {
+      "optional": true
+    }
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

@@ -171,6 +171,15 @@ function renderLocalUserAvatarPreview(avatar: string | null | undefined) {
 }
 
 function resolveAssistantPreviewAvatarUrl(props: QuickSettingsProps): string | null {
+  const override = normalizeOptionalString(props.assistantAvatarOverride);
+  if (override) {
+    return resolveChatAvatarRenderUrl(override, {
+      identity: {
+        avatar: override,
+        avatarUrl: override,
+      },
+    });
+  }
   if (props.assistantAvatarStatus === "none" && props.assistantAvatarReason === "missing") {
     return null;
   }
@@ -198,7 +207,11 @@ function formatAssistantAvatarIssue(
   status: QuickSettingsProps["assistantAvatarStatus"],
   reason: string | null | undefined,
   _rendered: boolean,
+  hasOverride = false,
 ): string | null {
+  if (hasOverride) {
+    return null;
+  }
   if (status === "remote") {
     return "Remote URLs are blocked by Control UI image policy";
   }
@@ -219,11 +232,14 @@ function formatAssistantAvatarIssue(
 
 function renderAssistantAvatarPreview(props: QuickSettingsProps) {
   const assistantName = normalizeOptionalString(props.assistantName) ?? "Assistant";
+  const assistantAvatarOverride = normalizeOptionalString(props.assistantAvatarOverride);
   const assistantAvatarUrl = resolveAssistantPreviewAvatarUrl(props);
   if (assistantAvatarUrl) {
     return html`<img class="qs-assistant-avatar" src=${assistantAvatarUrl} alt=${assistantName} />`;
   }
-  const assistantAvatarText = resolveAssistantTextAvatar(props.assistantAvatar);
+  const assistantAvatarText = resolveAssistantTextAvatar(
+    assistantAvatarOverride ?? props.assistantAvatar,
+  );
   if (assistantAvatarText) {
     return html`<div
       class="qs-assistant-avatar qs-assistant-avatar--text"
@@ -392,9 +408,9 @@ function renderModelCard(props: QuickSettingsProps) {
             ${THINKING_LEVELS.map(
               (level) => html`
                 <button
-                  class="qs-segmented__btn ${
-                    level === props.thinkingLevel ? "qs-segmented__btn--active" : ""
-                  }"
+                  class="qs-segmented__btn ${level === props.thinkingLevel
+                    ? "qs-segmented__btn--active"
+                    : ""}"
                   @click=${() => props.onThinkingChange?.(level)}
                 >
                   ${level.charAt(0).toUpperCase() + level.slice(1)}
@@ -429,34 +445,28 @@ function renderChannelsCard(props: QuickSettingsProps) {
     <div class="qs-card qs-card--channels">
       ${renderCardHeader(icons.send, "Channels", badge)}
       <div class="qs-card__body">
-        ${
-          props.channels.length === 0
-            ? html`
-                <div class="qs-empty muted">No channels configured</div>
-              `
-            : props.channels.map(
-                (ch) => html`
+        ${props.channels.length === 0
+          ? html` <div class="qs-empty muted">No channels configured</div> `
+          : props.channels.map(
+              (ch) => html`
                 <div class="qs-row">
                   <span class="qs-row__label">
                     <span class="qs-status-dot ${ch.connected ? "qs-status-dot--ok" : ""}"></span>
                     ${ch.label}
                   </span>
                   <span class="qs-row__value">
-                    ${
-                      ch.connected
-                        ? html`<span class="muted">${ch.detail ?? "Connected"}</span>`
-                        : html`<button
+                    ${ch.connected
+                      ? html`<span class="muted">${ch.detail ?? "Connected"}</span>`
+                      : html`<button
                           class="qs-link-btn"
                           @click=${() => props.onChannelConfigure?.(ch.id)}
                         >
                           Connect →
-                        </button>`
-                    }
+                        </button>`}
                   </span>
                 </div>
               `,
-              )
-        }
+            )}
       </div>
     </div>
   `;
@@ -546,9 +556,9 @@ function renderAppearanceCard(props: QuickSettingsProps) {
             ${themeOptions.map(
               (opt) => html`
                 <button
-                  class="qs-segmented__btn ${
-                    opt.id === props.theme ? "qs-segmented__btn--active" : ""
-                  }"
+                  class="qs-segmented__btn ${opt.id === props.theme
+                    ? "qs-segmented__btn--active"
+                    : ""}"
                   @click=${(e: Event) => {
                     if (opt.id === "custom" && !props.hasCustomTheme) {
                       props.onOpenCustomThemeImport?.();
@@ -573,9 +583,9 @@ function renderAppearanceCard(props: QuickSettingsProps) {
             ${(["light", "dark", "system"] as ThemeMode[]).map(
               (mode) => html`
                 <button
-                  class="qs-segmented__btn ${
-                    mode === props.themeMode ? "qs-segmented__btn--active" : ""
-                  }"
+                  class="qs-segmented__btn ${mode === props.themeMode
+                    ? "qs-segmented__btn--active"
+                    : ""}"
                   @click=${(e: Event) => {
                     if (mode !== props.themeMode) {
                       props.setThemeMode(mode, {
@@ -596,9 +606,10 @@ function renderAppearanceCard(props: QuickSettingsProps) {
             ${BORDER_RADIUS_STOPS.map(
               (stop) => html`
                 <button
-                  class="qs-segmented__btn qs-segmented__btn--compact ${
-                    stop.value === props.borderRadius ? "qs-segmented__btn--active" : ""
-                  }"
+                  class="qs-segmented__btn qs-segmented__btn--compact ${stop.value ===
+                  props.borderRadius
+                    ? "qs-segmented__btn--active"
+                    : ""}"
                   @click=${() => props.setBorderRadius(stop.value)}
                 >
                   ${stop.label}
@@ -621,15 +632,19 @@ function renderPersonalCard(props: QuickSettingsProps) {
   const assistantName = normalizeOptionalString(props.assistantName) ?? "Assistant";
   const assistantAvatarUrl = resolveAssistantPreviewAvatarUrl(props);
   const assistantAvatarRendered = Boolean(
-    assistantAvatarUrl || resolveAssistantTextAvatar(props.assistantAvatar),
+    assistantAvatarUrl ||
+    resolveAssistantTextAvatar(props.assistantAvatarOverride ?? props.assistantAvatar),
   );
-  const assistantAvatarSource = formatAssistantAvatarSource(props.assistantAvatarSource);
+  const assistantAvatarOverride = normalizeOptionalString(props.assistantAvatarOverride);
+  const assistantAvatarSource = formatAssistantAvatarSource(
+    assistantAvatarOverride ?? props.assistantAvatarSource,
+  );
   const assistantAvatarIssue = formatAssistantAvatarIssue(
     props.assistantAvatarStatus ?? null,
     props.assistantAvatarReason,
     assistantAvatarRendered,
+    Boolean(assistantAvatarOverride),
   );
-  const assistantAvatarOverride = normalizeOptionalString(props.assistantAvatarOverride);
   const assistantAvatarSourceLabel = assistantAvatarOverride ? "UI override" : "IDENTITY.md";
   const canOverrideAssistantAvatar = Boolean(props.onAssistantAvatarOverrideChange);
   const assistantAvatarSubtitle = assistantAvatarOverride
@@ -699,9 +714,8 @@ function renderPersonalCard(props: QuickSettingsProps) {
               <div class="qs-identity-card__eyebrow">Assistant</div>
               <div class="qs-identity-card__title">${assistantName}</div>
               <div class="qs-identity-card__sub">${assistantAvatarSubtitle}</div>
-              ${
-                assistantAvatarSource
-                  ? html`
+              ${assistantAvatarSource
+                ? html`
                     <div
                       class="qs-identity-card__source"
                       title=${props.assistantAvatarSource ?? ""}
@@ -710,26 +724,20 @@ function renderPersonalCard(props: QuickSettingsProps) {
                       <code>${assistantAvatarSource}</code>
                     </div>
                   `
-                  : nothing
-              }
-              ${
-                assistantAvatarIssue
-                  ? html`<div class="qs-identity-card__issue">${assistantAvatarIssue}</div>`
-                  : nothing
-              }
-              ${
-                canOverrideAssistantAvatar
-                  ? html`
+                : nothing}
+              ${assistantAvatarIssue
+                ? html`<div class="qs-identity-card__issue">${assistantAvatarIssue}</div>`
+                : nothing}
+              ${canOverrideAssistantAvatar
+                ? html`
                     <div class="qs-identity-card__repair">
                       <div class="qs-identity-card__actions">
                         <label class="btn btn--sm">
-                          ${
-                            props.assistantAvatarUploadBusy
-                              ? "Saving..."
-                              : assistantAvatarOverride
-                                ? "Replace image"
-                                : "Choose image"
-                          }
+                          ${props.assistantAvatarUploadBusy
+                            ? "Saving..."
+                            : assistantAvatarOverride
+                              ? "Replace image"
+                              : "Choose image"}
                           <input
                             type="file"
                             accept="image/*"
@@ -738,9 +746,8 @@ function renderPersonalCard(props: QuickSettingsProps) {
                             @change=${(e: Event) => handleAssistantAvatarFileSelect(e, props)}
                           />
                         </label>
-                        ${
-                          assistantAvatarOverride
-                            ? html`
+                        ${assistantAvatarOverride
+                          ? html`
                               <button
                                 type="button"
                                 class="btn btn--sm btn--ghost"
@@ -752,23 +759,19 @@ function renderPersonalCard(props: QuickSettingsProps) {
                                 Clear override
                               </button>
                             `
-                            : nothing
-                        }
+                          : nothing}
                       </div>
                       <div class="muted">
                         Stores a Control UI override. Clear it to return to IDENTITY.md.
                       </div>
                     </div>
                   `
-                  : nothing
-              }
-              ${
-                props.assistantAvatarUploadError
-                  ? html`<div class="qs-identity-card__error">
+                : nothing}
+              ${props.assistantAvatarUploadError
+                ? html`<div class="qs-identity-card__error">
                     ${props.assistantAvatarUploadError}
                   </div>`
-                  : nothing
-              }
+                : nothing}
             </div>
           </section>
         </div>
@@ -849,16 +852,10 @@ function renderPresetsCard(props: QuickSettingsProps) {
         icons.zap,
         "Context Profile",
         hasPendingProfileChange
-          ? html`
-              <span class="qs-badge qs-badge--warn">Pending</span>
-            `
+          ? html` <span class="qs-badge qs-badge--warn">Pending</span> `
           : savedPreset
-            ? html`
-                <span class="qs-badge qs-badge--ok">Saved</span>
-              `
-            : html`
-                <span class="qs-badge">Custom</span>
-              `,
+            ? html` <span class="qs-badge qs-badge--ok">Saved</span> `
+            : html` <span class="qs-badge">Custom</span> `,
       )}
       <div class="qs-card__body qs-profiles">
         <div class="qs-profiles__copy">
@@ -892,20 +889,12 @@ function renderPresetsCard(props: QuickSettingsProps) {
                       </div>
                     </div>
                     <div class="qs-preset__badges">
-                      ${
-                        preset.id === savedPresetId
-                          ? html`
-                              <span class="qs-badge qs-badge--ok">Current</span>
-                            `
-                          : nothing
-                      }
-                      ${
-                        hasPendingProfileChange && preset.id === selectedPresetId
-                          ? html`
-                              <span class="qs-badge qs-badge--warn">Selected</span>
-                            `
-                          : nothing
-                      }
+                      ${preset.id === savedPresetId
+                        ? html` <span class="qs-badge qs-badge--ok">Current</span> `
+                        : nothing}
+                      ${hasPendingProfileChange && preset.id === selectedPresetId
+                        ? html` <span class="qs-badge qs-badge--warn">Selected</span> `
+                        : nothing}
                     </div>
                   </div>
                   <div class="qs-preset__meta">
@@ -954,9 +943,8 @@ function renderPresetsCard(props: QuickSettingsProps) {
             })}
           </div>
 
-          ${
-            hasPendingConfigChange
-              ? html`
+          ${hasPendingConfigChange
+            ? html`
                 <div class="qs-profile-panel__actions">
                   <div class="qs-profile-panel__actions-copy muted">${commitCopy}</div>
                   <div class="qs-profile-panel__actions-row">
@@ -972,13 +960,11 @@ function renderPresetsCard(props: QuickSettingsProps) {
                       ?disabled=${!canCommit}
                       @click=${props.onSaveConfig}
                     >
-                      ${
-                        props.configSaving === true
-                          ? "Saving…"
-                          : hasPendingProfileChange
-                            ? "Save Profile"
-                            : "Save Changes"
-                      }
+                      ${props.configSaving === true
+                        ? "Saving…"
+                        : hasPendingProfileChange
+                          ? "Save Profile"
+                          : "Save Changes"}
                     </button>
                     <button
                       class="btn btn--sm"
@@ -990,16 +976,13 @@ function renderPresetsCard(props: QuickSettingsProps) {
                   </div>
                 </div>
               `
-              : html`
+            : html`
                 <div class="qs-profile-panel__footer muted" aria-live="polite">
-                  ${
-                    savedPreset
-                      ? "Saved and ready. Choose another profile to stage a change."
-                      : "Current values are custom. Choose a profile to stage a change."
-                  }
+                  ${savedPreset
+                    ? "Saved and ready. Choose another profile to stage a change."
+                    : "Current values are custom. Choose a profile to stage a change."}
                 </div>
-              `
-          }
+              `}
         </div>
       </div>
     </div>

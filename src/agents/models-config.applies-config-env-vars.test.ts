@@ -125,6 +125,39 @@ describe("models-config", () => {
     expect(observedWorkspaceDir).toBe("/tmp/openclaw-workspace");
   });
 
+  it("threads startup provider discovery scope into implicit provider discovery", async () => {
+    let observedProviderIds: readonly string[] | undefined;
+    let observedEntriesOnly: boolean | undefined;
+    let observedTimeoutMs: number | undefined;
+
+    await resolveProvidersForModelsJsonWithDeps(
+      {
+        cfg: { models: { providers: {} } },
+        agentDir: "/tmp/openclaw-models-config-env-vars-test",
+        env: {},
+        providerDiscoveryProviderIds: ["openai"],
+        providerDiscoveryEntriesOnly: true,
+        providerDiscoveryTimeoutMs: 5000,
+      },
+      {
+        resolveImplicitProviders: async ({
+          providerDiscoveryProviderIds,
+          providerDiscoveryEntriesOnly,
+          providerDiscoveryTimeoutMs,
+        }) => {
+          observedProviderIds = providerDiscoveryProviderIds;
+          observedEntriesOnly = providerDiscoveryEntriesOnly;
+          observedTimeoutMs = providerDiscoveryTimeoutMs;
+          return {};
+        },
+      },
+    );
+
+    expect(observedProviderIds).toEqual(["openai"]);
+    expect(observedEntriesOnly).toBe(true);
+    expect(observedTimeoutMs).toBe(5000);
+  });
+
   it("threads plugin metadata snapshots through models.json planning", async () => {
     const pluginMetadataSnapshot = {
       index: { plugins: [] },

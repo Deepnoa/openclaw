@@ -15,7 +15,7 @@ import {
 } from "../canvas-host/a2ui.js";
 import type { CanvasHostHandler } from "../canvas-host/server.js";
 import { resolveBundledChannelGatewayAuthBypassPaths } from "../channels/plugins/gateway-auth-bypass.js";
-import { getRuntimeConfig } from "../config/config.js";
+import { getRuntimeConfig } from "../config/io.js";
 import type { OpenClawConfig } from "../config/types.openclaw.js";
 import {
   createDiagnosticTraceContext,
@@ -68,6 +68,7 @@ let openResponsesHttpModulePromise: Promise<typeof import("./openresponses-http.
 let sessionHistoryHttpModulePromise:
   | Promise<typeof import("./sessions-history-http.js")>
   | undefined;
+let internalStateHttpModulePromise: Promise<typeof import("./internal-state-http.js")> | undefined;
 let sessionKillHttpModulePromise: Promise<typeof import("./session-kill-http.js")> | undefined;
 let toolsInvokeHttpModulePromise: Promise<typeof import("./tools-invoke-http.js")> | undefined;
 let voiceClawRealtimeUpgradeModulePromise:
@@ -117,6 +118,11 @@ function getOpenResponsesHttpModule() {
 function getSessionHistoryHttpModule() {
   sessionHistoryHttpModulePromise ??= import("./sessions-history-http.js");
   return sessionHistoryHttpModulePromise;
+}
+
+function getInternalStateHttpModule() {
+  internalStateHttpModulePromise ??= import("./internal-state-http.js");
+  return internalStateHttpModulePromise;
 }
 
 function getSessionKillHttpModule() {
@@ -212,6 +218,10 @@ function isOpenResponsesPath(pathname: string): boolean {
 
 function isToolsInvokePath(pathname: string): boolean {
   return pathname === "/tools/invoke";
+}
+
+function isManagedOutgoingImagePath(pathname: string): boolean {
+  return pathname.startsWith("/api/chat/media/outgoing/");
 }
 
 function isSessionKillPath(pathname: string): boolean {
@@ -671,6 +681,16 @@ export function createGatewayHttpServer(opts: {
             }),
         });
       }
+      requestStages.push({
+        name: "internal-state",
+        run: async () =>
+          (await getInternalStateHttpModule()).handleInternalStateHttpRequest(req, res, {
+            auth: resolvedAuth,
+            trustedProxies,
+            allowRealIpFallback,
+            rateLimiter,
+          }),
+      });
       if (canvasHost) {
         requestStages.push({
           name: "canvas-auth",
@@ -724,20 +744,22 @@ export function createGatewayHttpServer(opts: {
         }),
       );
 
-      requestStages.push({
-        name: "chat-managed-image-media",
-        run: async () =>
-          (await getManagedImageAttachmentsModule()).handleManagedOutgoingImageHttpRequest(
-            req,
-            res,
-            {
-              auth: resolvedAuth,
-              trustedProxies,
-              allowRealIpFallback,
-              rateLimiter,
-            },
-          ),
-      });
+      if (isManagedOutgoingImagePath(scopedRequestPath)) {
+        requestStages.push({
+          name: "chat-managed-image-media",
+          run: async () =>
+            (await getManagedImageAttachmentsModule()).handleManagedOutgoingImageHttpRequest(
+              req,
+              res,
+              {
+                auth: resolvedAuth,
+                trustedProxies,
+                allowRealIpFallback,
+                rateLimiter,
+              },
+            ),
+        });
+      }
 
       if (controlUiEnabled) {
         requestStages.push({

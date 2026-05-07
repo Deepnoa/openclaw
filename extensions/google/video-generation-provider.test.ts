@@ -26,7 +26,7 @@ vi.mock("./google-genai-runtime.js", () => ({
 }));
 
 import * as providerAuthRuntime from "openclaw/plugin-sdk/provider-auth-runtime";
-import { expectExplicitVideoGenerationCapabilities } from "../../test/helpers/media-generation/provider-capability-assertions.js";
+import { expectExplicitVideoGenerationCapabilities } from "openclaw/plugin-sdk/provider-test-contracts";
 import { buildGoogleVideoGenerationProvider } from "./video-generation-provider.js";
 
 describe("google video generation provider", () => {
@@ -86,11 +86,11 @@ describe("google video generation provider", () => {
           durationSeconds: 4,
           aspectRatio: "16:9",
           resolution: "720p",
-          generateAudio: true,
         }),
       }),
     );
     expect(request?.config).not.toHaveProperty("numberOfVideos");
+    expect(request?.config).not.toHaveProperty("generateAudio");
     expect(result.videos).toHaveLength(1);
     expect(result.videos[0]?.mimeType).toBe("video/mp4");
     expect(createGoogleGenAIMock).toHaveBeenCalledWith(

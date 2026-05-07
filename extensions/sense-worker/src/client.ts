@@ -319,11 +319,10 @@ export async function getNemoClawGpuStatus(
 
   try {
     const [serviceState, envState, journalState, healthState] = await Promise.allSettled([
-      execFileAsync(
-        "systemctl",
-        ["--user", "is-active", RUNNER_SYSTEMD_UNIT],
-        { encoding: "utf8", maxBuffer: 1024 * 1024 },
-      ),
+      execFileAsync("systemctl", ["--user", "is-active", RUNNER_SYSTEMD_UNIT], {
+        encoding: "utf8",
+        maxBuffer: 1024 * 1024,
+      }),
       execFileAsync(
         "systemctl",
         ["--user", "show", RUNNER_SYSTEMD_UNIT, "--property=Environment", "--value"],
@@ -354,11 +353,7 @@ export async function getNemoClawGpuStatus(
     }
 
     const workerHealth =
-      healthState.status === "fulfilled"
-        ? healthState.value.ok
-          ? "up"
-          : "down"
-        : "down";
+      healthState.status === "fulfilled" ? (healthState.value.ok ? "up" : "down") : "down";
 
     return {
       runner,
