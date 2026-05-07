@@ -184,6 +184,12 @@ export async function readJsonBody(
   return { ok: false, error: result.error };
 }
 
+export type ReadHookBodyResult = { ok: true; value: unknown } | { ok: false; error: string };
+
+export * from "./hooks/contract/inquiry-events.js";
+export * from "./hooks/dto/office-ui-intake-payload.js";
+export * from "./hooks/intake/formspree-adapter.js";
+
 export function normalizeHookHeaders(req: IncomingMessage) {
   const headers: Record<string, string> = {};
   for (const [key, value] of Object.entries(req.headers)) {
