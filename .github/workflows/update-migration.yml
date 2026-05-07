@@ -35,7 +35,7 @@ jobs:
     name: Update migration matrix
     uses: ./.github/workflows/package-acceptance.yml
     with:
-      workflow_ref: ${{ inputs.workflow_ref }}
+      workflow_ref: ${{ inputs.workflow_ref }} # zizmor: ignore[template-injection] reusable workflow with: input; no run-step expansion
       source: ref
       package_ref: ${{ inputs.package_ref }}
       suite_profile: custom
