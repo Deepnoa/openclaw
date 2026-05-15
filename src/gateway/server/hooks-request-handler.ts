@@ -244,6 +244,7 @@ async function syncOfficeUiIntake(
   session: ReturnType<typeof buildFormspreeIntakeSession>,
   logHooks: SubsystemLogger,
   runtimeTaskId?: string,
+  inquiryId?: string,
 ): Promise<void> {
   const url = resolveOfficeUiIntakeUrl();
   const controller = new AbortController();
@@ -252,7 +253,7 @@ async function syncOfficeUiIntake(
     const response = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(buildOfficeUiIntakePayload(session, runtimeTaskId)),
+      body: JSON.stringify(buildOfficeUiIntakePayload(session, runtimeTaskId, inquiryId)),
       signal: controller.signal,
     });
     if (!response.ok) {
@@ -661,9 +662,16 @@ export function createHooksRequestHandler(
         if (visibleSessionKey.ok) {
           const mainAgentId = resolveHookTargetAgentId(hooksConfig, "main");
           if (isHookAgentAllowed(hooksConfig, mainAgentId)) {
+            const visibleSessionTitle = [
+              "[HP]",
+              intakeSession.routing.service?.trim() || event.category,
+              `#${inquiryId}`,
+            ]
+              .filter(Boolean)
+              .join(" ");
             visibleRunId = dispatchAgentHook({
               message: buildFormspreeVisibleSessionMessage(intakeSession),
-              name: "Formspree Inquiry",
+              name: visibleSessionTitle,
               agentId: mainAgentId,
               wakeMode: "now",
               sessionKey: normalizeHookDispatchSessionKey({
@@ -684,9 +692,16 @@ export function createHooksRequestHandler(
         });
         const targetAgentId = resolveHookTargetAgentId(hooksConfig, "ops");
         if (opsSessionKey.ok && isHookAgentAllowed(hooksConfig, targetAgentId)) {
+          const opsSessionTitle = [
+            "[HP Inquiry]",
+            intakeSession.routing.service?.trim() || event.category,
+            `#${inquiryId}`,
+          ]
+            .filter(Boolean)
+            .join(" ");
           runId = dispatchAgentHook({
             message: buildFormspreeOpsHookMessage(intakeSession),
-            name: "Formspree Intake",
+            name: opsSessionTitle,
             agentId: targetAgentId,
             wakeMode: "now",
             sessionKey: normalizeHookDispatchSessionKey({
@@ -705,7 +720,7 @@ export function createHooksRequestHandler(
       if (shouldLaunchDocumentRequestRuntime(intakeSession)) {
         runtimeTaskId = await launchDocumentRequestRuntime(intakeSession, inquiryId, logHooks);
       }
-      await syncOfficeUiIntake(intakeSession, logHooks, runtimeTaskId);
+      await syncOfficeUiIntake(intakeSession, logHooks, runtimeTaskId, inquiryId);
       sendJson(res, 200, {
         ok: true,
         source: "formspree",

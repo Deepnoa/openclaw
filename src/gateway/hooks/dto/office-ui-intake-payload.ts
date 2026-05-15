@@ -2,6 +2,7 @@ import {
   FORMSPREE_SOURCE,
   INQUIRY_EVENT_TYPE,
   OFFICE_UI_HAS_REPLY_DRAFT_FIELD,
+  OFFICE_UI_INQUIRY_ID_FIELD,
   OFFICE_UI_RUNTIME_TASK_ID_FIELD,
 } from "../contract/inquiry-events.js";
 import type { FormspreeIntakeSession } from "../intake/formspree-adapter.js";
@@ -22,11 +23,13 @@ export type OfficeUiIntakePayload = {
   message: string;
   [OFFICE_UI_RUNTIME_TASK_ID_FIELD]?: string;
   [OFFICE_UI_HAS_REPLY_DRAFT_FIELD]?: boolean;
+  [OFFICE_UI_INQUIRY_ID_FIELD]?: string;
 };
 
 export function buildOfficeUiIntakePayload(
   session: FormspreeIntakeSession,
   runtimeTaskId?: string,
+  inquiryId?: string,
 ): OfficeUiIntakePayload {
   const event = session.public_event;
   const service = session.routing.service?.trim() || "other";
@@ -57,6 +60,9 @@ export function buildOfficeUiIntakePayload(
   if (runtimeTaskId) {
     payload[OFFICE_UI_RUNTIME_TASK_ID_FIELD] = runtimeTaskId;
     payload[OFFICE_UI_HAS_REPLY_DRAFT_FIELD] = false;
+  }
+  if (inquiryId) {
+    payload[OFFICE_UI_INQUIRY_ID_FIELD] = inquiryId;
   }
   return payload;
 }
