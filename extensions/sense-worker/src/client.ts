@@ -156,7 +156,9 @@ async function fetchJson(params: {
       params.logger?.warn?.(
         `[sense-worker] timeout method=${params.method} url=${params.url} timeout_ms=${params.timeoutMs}`,
       );
-      throw new Error(`Sense worker request timed out after ${params.timeoutMs}ms`);
+      throw new Error(`Sense worker request timed out after ${params.timeoutMs}ms`, {
+        cause: error,
+      });
     }
     params.logger?.error?.(
       `[sense-worker] request failed method=${params.method} url=${params.url}: ${message}`,
@@ -254,7 +256,7 @@ export async function getRecentSenseJobRefs(
     );
     const refs: SenseRecentJobRef[] = [];
     const seen = new Set<string>();
-    const lines = stdout.split(/\r?\n/).reverse();
+    const lines = stdout.split(/\r?\n/).toReversed();
     for (const line of lines) {
       const match = JOB_ID_PATTERN.exec(line);
       if (!match) {
@@ -294,7 +296,7 @@ function parseSystemdEnvironment(stdout: string): Record<string, string> {
 }
 
 function resolveGpuStateFromJournal(stdout: string): NemoClawGpuStatus["gpu"] {
-  const lines = stdout.split(/\r?\n/).reverse();
+  const lines = stdout.split(/\r?\n/).toReversed();
   for (const line of lines) {
     if (!RUNNER_ACTIVITY_PATTERN.test(line)) {
       continue;

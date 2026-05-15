@@ -135,8 +135,12 @@ async function requestJson({ method, url, token, body, timeoutMs }) {
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const headers = { Accept: "application/json" };
-    if (token) headers["X-Sense-Worker-Token"] = token;
-    if (body) headers["Content-Type"] = "application/json";
+    if (token) {
+      headers["X-Sense-Worker-Token"] = token;
+    }
+    if (body) {
+      headers["Content-Type"] = "application/json";
+    }
     const init = {
       method,
       headers,

@@ -505,9 +505,7 @@ function buildRuntimeEventsFeed(
       });
     }
   }
-  feed.sort((left, right) =>
-    String(right.timestamp ?? "").localeCompare(String(left.timestamp ?? "")),
-  );
+  feed.sort((left, right) => (right.timestamp ?? "").localeCompare(left.timestamp ?? ""));
   return feed.slice(0, 100);
 }
 
@@ -523,7 +521,7 @@ async function buildInternalState(): Promise<InternalStateResponse> {
       tasksById.set(task.taskId, task);
     }
   }
-  const sortedRuntimeEvents = [...runtimeEvents].sort((left, right) =>
+  const sortedRuntimeEvents = [...runtimeEvents].toSorted((left, right) =>
     normalizeIso(left.timestamp).localeCompare(normalizeIso(right.timestamp)),
   );
   for (const event of sortedRuntimeEvents) {
@@ -539,7 +537,7 @@ async function buildInternalState(): Promise<InternalStateResponse> {
     tasksById.set(taskId, enrichFromRunState(task, runStates.get(taskId)));
   }
 
-  const tasks = [...tasksById.values()].sort((left, right) =>
+  const tasks = [...tasksById.values()].toSorted((left, right) =>
     right.updatedAt.localeCompare(left.updatedAt),
   );
   const nowIso = new Date().toISOString();
