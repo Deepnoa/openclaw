@@ -6,5 +6,5 @@ import type {
 import { createNasTools } from "./src/nas-tools.js";
 
 export default function register(api: OpenClawPluginApi) {
-  api.registerTool((() => createNasTools(api) as AnyAgentTool[]) as OpenClawPluginToolFactory);
+  api.registerTool((() => createNasTools(api)) as OpenClawPluginToolFactory);
 }

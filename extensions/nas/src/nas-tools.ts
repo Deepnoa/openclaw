@@ -1,6 +1,6 @@
+import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
-import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { Type } from "@sinclair/typebox";
 import type { AnyAgentTool, OpenClawPluginApi } from "../../../src/plugins/types.js";
@@ -93,11 +93,7 @@ async function assertExists(targetPath: string): Promise<void> {
   }
 }
 
-async function listDirectory(params: {
-  root: string;
-  relPath: string;
-  limit: number;
-}): Promise<{
+async function listDirectory(params: { root: string; relPath: string; limit: number }): Promise<{
   root: string;
   path: string;
   total: number;
@@ -159,7 +155,7 @@ async function runSearch(params: {
     if (err.code === 1) {
       stdout = err.stdout ?? "";
     } else {
-      throw new Error("ripgrep (rg) is required for nas_search");
+      throw new Error("ripgrep (rg) is required for nas_search", { cause: error });
     }
   }
 
@@ -233,7 +229,7 @@ async function runFilenameSearch(params: {
     if (err.code === 1) {
       stdout = err.stdout ?? "";
     } else {
-      throw new Error("ripgrep (rg) is required for nas_search");
+      throw new Error("ripgrep (rg) is required for nas_search", { cause: error });
     }
   }
 
@@ -245,7 +241,8 @@ async function runFilenameSearch(params: {
       const relFile = toRelPath(params.root, absFile);
       const baseName = path.basename(relFile);
       return (
-        relFile.toLocaleLowerCase().includes(needle) || baseName.toLocaleLowerCase().includes(needle)
+        relFile.toLocaleLowerCase().includes(needle) ||
+        baseName.toLocaleLowerCase().includes(needle)
       );
     });
 

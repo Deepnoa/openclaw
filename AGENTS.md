@@ -199,6 +199,7 @@ Telegraph style. Root rules only. Read scoped `AGENTS.md` before subtree work.
 - People wiki provenance: generated identity, social, contact, and "fun detail" notes need explicit source class/confidence (`maintainer-whois`, Discrawl sample/stat, GitHub profile, maintainer repo file). Do not promote inferred details to facts.
 - Rebrand/migration/config warnings: run `openclaw doctor`.
 - Never edit `node_modules`.
+- Server home dir: no clone/worktree at `~/` root. Use `~/repos/`, `~/sandbox/claude/`, `~/runtime/`. Production paths (`~/openclaw`, `~/.openclaw`, `~/Deepnoa-Office-UI-light-polish`) are not moveable; `~/runtime/queue/*` and `~/.local/share/pnpm/store/` are not deleteable without explicit approval. See `~/HOME_LAYOUT_POLICY.md`.
 - Local-only `.agents` ignores: `.git/info/exclude`, not repo `.gitignore`.
 - CLI progress: `src/cli/progress.ts`; status tables: `src/terminal/table.ts`.
 - Connection/provider additions: update all UI surfaces + docs + status/config forms.

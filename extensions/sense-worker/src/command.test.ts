@@ -465,7 +465,7 @@ describe("handleNemoClawCommand", () => {
     });
     const { handleNemoClawCommand } = await import("./command.js");
     await expect(handleNemoClawCommand("run health")).resolves.toEqual({
-      text: "NemoClaw health\n" + "- runner: up\n" + "- worker health: up\n" + "- gpu: idle",
+      text: "NemoClaw health\n- runner: up\n- worker health: up\n- gpu: idle",
     });
   });
 
@@ -490,7 +490,7 @@ describe("handleNemoClawCommand", () => {
       });
     const { handleNemoClawCommand } = await import("./command.js");
     await expect(handleNemoClawCommand("run status")).resolves.toEqual({
-      text: "NemoClaw status\n" + "- runner: up\n" + "- gpu: idle\n" + "- recent: 2 jobs, 1 failed",
+      text: "NemoClaw status\n- runner: up\n- gpu: idle\n- recent: 2 jobs, 1 failed",
     });
   });
 

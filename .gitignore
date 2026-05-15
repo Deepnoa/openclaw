@@ -223,3 +223,10 @@ extensions/**/.openclaw-runtime-deps-stamp.json
 # Output dir for scripts/run-opengrep.sh (local opengrep scans)
 /.opengrep-out/
 /.crabbox-artifacts
+
+# Deepnoa runtime artifacts (never commit)
+runs/queued-runtime-tasks.jsonl
+runs/runtime-events.jsonl
+runs/*/result.json
+runs/*/result-*.json
+runs/trace-*/
