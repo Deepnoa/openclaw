@@ -84,6 +84,7 @@ const METHOD_SCOPE_GROUPS: Record<OperatorScope, readonly string[]> = {
     "commands.list",
     "models.list",
     "models.authStatus",
+    "nas.manifestHealth",
     "tools.catalog",
     "tools.effective",
     "plugins.uiDescriptors",

@@ -384,6 +384,7 @@ export const vi: TranslationMap = {
     debug: "Gỡ lỗi",
     logs: "Nhật ký",
     dreams: "Đang mơ",
+    knowledge: "Knowledge",
   },
   subtitles: {
     agents: "Không gian làm việc, công cụ, danh tính.",
@@ -405,6 +406,7 @@ export const vi: TranslationMap = {
     debug: "Ảnh chụp, sự kiện, RPC.",
     logs: "Nhật ký gateway trực tiếp.",
     dreams: "Mơ bộ nhớ, hợp nhất và phản chiếu.",
+    knowledge: "Governed knowledge operations.",
   },
   overview: {
     access: {
@@ -954,6 +956,26 @@ export const vi: TranslationMap = {
     vi: "Tiếng Việt (Tiếng Việt)",
     nl: "Nederlands (Tiếng Hà Lan)",
     fa: "فارسی (Tiếng Ba Tư)",
+  },
+  knowledge: {
+    title: "Knowledge Operations",
+    manifestCount: "manifest entries",
+    runtimePressure: "Runtime pressure",
+    discover: "Discover",
+    retrieve: "Retrieve",
+    propose: "Propose",
+    queryPlaceholder: "Search query…",
+    confirmExecute: "Confirm Execute",
+    confirmModal_title: "Confirm Governed Ingestion",
+    confirmModal_body: "Review governance decision and confirm execution.",
+    confirmModal_proceed: "Execute",
+    confirmModal_cancel: "Hủy",
+    badge_allowed: "Allowed",
+    badge_blocked: "Blocked",
+    badge_review: "Review Required",
+    badge_dryRun: "Dry-Run Ready",
+    badge_critical: "Critical",
+    badge_retrieved: "Retrieved",
   },
   cron: {
     quickCreate: {

@@ -567,6 +567,22 @@ export class OpenClawApp extends LitElement {
   @state() logsMaxBytes = 250_000;
   @state() logsAtBottom = true;
 
+  @state() knowledgePanelLoading = false;
+  @state() knowledgePanelError: string | null = null;
+  @state() knowledgePanel: import("./controllers/knowledge.js").KnowledgePanelData | null = null;
+  @state() knowledgeActionLoading = false;
+  @state() knowledgeActionError: string | null = null;
+  @state() knowledgeActionResult:
+    | import("./controllers/knowledge.js").KnowledgeActionResult
+    | null = null;
+  @state() knowledgeQuery = "";
+  @state() knowledgeConfirmPending: {
+    path: string;
+    dryRunResult: import("./controllers/knowledge.js").IngestDryRunData;
+  } | null = null;
+  @state() knowledgeConfirmExecuting = false;
+  @state() knowledgeConfirmResult: string | null = null;
+
   client: GatewayBrowserClient | null = null;
   private chatScrollFrame: number | null = null;
   private chatScrollTimeout: number | null = null;

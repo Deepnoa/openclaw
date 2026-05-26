@@ -382,6 +382,7 @@ export const zh_TW: TranslationMap = {
     debug: "調試",
     logs: "日誌",
     dreams: "夢境",
+    knowledge: "Knowledge",
   },
   subtitles: {
     agents: "工作區、工具、身份。",
@@ -403,6 +404,7 @@ export const zh_TW: TranslationMap = {
     debug: "快照、事件、RPC。",
     logs: "實時網關日誌。",
     dreams: "睡眠期間的記憶整合。",
+    knowledge: "Governed knowledge operations.",
   },
   overview: {
     access: {
@@ -943,6 +945,26 @@ export const zh_TW: TranslationMap = {
     vi: "Tiếng Việt（越南文）",
     nl: "Nederlands（荷蘭文）",
     fa: "فارسی（波斯文）",
+  },
+  knowledge: {
+    title: "Knowledge Operations",
+    manifestCount: "manifest entries",
+    runtimePressure: "Runtime pressure",
+    discover: "Discover",
+    retrieve: "Retrieve",
+    propose: "Propose",
+    queryPlaceholder: "Search query…",
+    confirmExecute: "Confirm Execute",
+    confirmModal_title: "Confirm Governed Ingestion",
+    confirmModal_body: "Review governance decision and confirm execution.",
+    confirmModal_proceed: "Execute",
+    confirmModal_cancel: "取消",
+    badge_allowed: "Allowed",
+    badge_blocked: "Blocked",
+    badge_review: "Review Required",
+    badge_dryRun: "Dry-Run Ready",
+    badge_critical: "Critical",
+    badge_retrieved: "Retrieved",
   },
   cron: {
     quickCreate: {

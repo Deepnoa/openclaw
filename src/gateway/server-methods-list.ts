@@ -67,6 +67,7 @@ const BASE_METHODS = [
   "commands.list",
   "models.list",
   "models.authStatus",
+  "nas.manifestHealth",
   "tools.catalog",
   "tools.effective",
   "tools.invoke",

@@ -23,5 +23,17 @@
         "description": "Max matches for nas_search. Default: 50"
       }
     }
+  },
+  "contracts": {
+    "tools": [
+      "nas_list",
+      "nas_search",
+      "nas_read",
+      "nas_summary",
+      "nas_ingest_file",
+      "nas_retrieve_governed",
+      "nas_discover_files",
+      "nas_knowledge_assist"
+    ]
   }
 }

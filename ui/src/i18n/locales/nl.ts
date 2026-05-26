@@ -386,6 +386,7 @@ export const nl: TranslationMap = {
     debug: "Debuggen",
     logs: "Logs",
     dreams: "Dromen",
+    knowledge: "Knowledge",
   },
   subtitles: {
     agents: "Werkruimten, tools, identiteiten.",
@@ -407,6 +408,7 @@ export const nl: TranslationMap = {
     debug: "Momentopnamen, gebeurtenissen, RPC.",
     logs: "Live Gateway-logs.",
     dreams: "Geheugendromen, consolidatie en reflectie.",
+    knowledge: "Governed knowledge operations.",
   },
   overview: {
     access: {
@@ -960,6 +962,26 @@ export const nl: TranslationMap = {
     vi: "Tiếng Việt (Vietnamees)",
     nl: "Nederlands",
     fa: "فارسی (Perzisch)",
+  },
+  knowledge: {
+    title: "Knowledge Operations",
+    manifestCount: "manifest entries",
+    runtimePressure: "Runtime pressure",
+    discover: "Discover",
+    retrieve: "Retrieve",
+    propose: "Propose",
+    queryPlaceholder: "Search query…",
+    confirmExecute: "Confirm Execute",
+    confirmModal_title: "Confirm Governed Ingestion",
+    confirmModal_body: "Review governance decision and confirm execution.",
+    confirmModal_proceed: "Execute",
+    confirmModal_cancel: "Annuleren",
+    badge_allowed: "Allowed",
+    badge_blocked: "Blocked",
+    badge_review: "Review Required",
+    badge_dryRun: "Dry-Run Ready",
+    badge_critical: "Critical",
+    badge_retrieved: "Retrieved",
   },
   cron: {
     quickCreate: {

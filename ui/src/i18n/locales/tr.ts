@@ -386,6 +386,7 @@ export const tr: TranslationMap = {
     debug: "Hata Ayıklama",
     logs: "Günlükler",
     dreams: "Düşler",
+    knowledge: "Knowledge",
   },
   subtitles: {
     agents: "Çalışma alanları, araçlar, kimlikler.",
@@ -407,6 +408,7 @@ export const tr: TranslationMap = {
     debug: "Anlık görüntüler, olaylar, RPC.",
     logs: "Canlı Gateway günlükleri.",
     dreams: "Uyku sırasında bellek birleştirme.",
+    knowledge: "Governed knowledge operations.",
   },
   overview: {
     access: {
@@ -962,6 +964,26 @@ export const tr: TranslationMap = {
     vi: "Tiếng Việt (Vietnamca)",
     nl: "Nederlands (Felemenkçe)",
     fa: "فارسی (Farsça)",
+  },
+  knowledge: {
+    title: "Knowledge Operations",
+    manifestCount: "manifest entries",
+    runtimePressure: "Runtime pressure",
+    discover: "Discover",
+    retrieve: "Retrieve",
+    propose: "Propose",
+    queryPlaceholder: "Search query…",
+    confirmExecute: "Confirm Execute",
+    confirmModal_title: "Confirm Governed Ingestion",
+    confirmModal_body: "Review governance decision and confirm execution.",
+    confirmModal_proceed: "Execute",
+    confirmModal_cancel: "İptal",
+    badge_allowed: "Allowed",
+    badge_blocked: "Blocked",
+    badge_review: "Review Required",
+    badge_dryRun: "Dry-Run Ready",
+    badge_critical: "Critical",
+    badge_retrieved: "Retrieved",
   },
   cron: {
     quickCreate: {

@@ -382,6 +382,7 @@ export const th: TranslationMap = {
     debug: "ดีบัก",
     logs: "บันทึก",
     dreams: "การฝัน",
+    knowledge: "Knowledge",
   },
   subtitles: {
     agents: "เวิร์กสเปซ เครื่องมือ และข้อมูลประจำตัว",
@@ -403,6 +404,7 @@ export const th: TranslationMap = {
     debug: "สแนปช็อต เหตุการณ์ และ RPC",
     logs: "บันทึกเกตเวย์แบบสด",
     dreams: "การฝันของหน่วยความจำ การรวมข้อมูล และการสะท้อนคิด",
+    knowledge: "Governed knowledge operations.",
   },
   overview: {
     access: {
@@ -943,6 +945,26 @@ export const th: TranslationMap = {
     vi: "Tiếng Việt (เวียดนาม)",
     nl: "Nederlands (ดัตช์)",
     fa: "فارسی (เปอร์เซีย)",
+  },
+  knowledge: {
+    title: "Knowledge Operations",
+    manifestCount: "manifest entries",
+    runtimePressure: "Runtime pressure",
+    discover: "Discover",
+    retrieve: "Retrieve",
+    propose: "Propose",
+    queryPlaceholder: "Search query…",
+    confirmExecute: "Confirm Execute",
+    confirmModal_title: "Confirm Governed Ingestion",
+    confirmModal_body: "Review governance decision and confirm execution.",
+    confirmModal_proceed: "Execute",
+    confirmModal_cancel: "ยกเลิก",
+    badge_allowed: "Allowed",
+    badge_blocked: "Blocked",
+    badge_review: "Review Required",
+    badge_dryRun: "Dry-Run Ready",
+    badge_critical: "Critical",
+    badge_retrieved: "Retrieved",
   },
   cron: {
     quickCreate: {

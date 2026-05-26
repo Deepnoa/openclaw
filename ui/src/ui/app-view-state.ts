@@ -9,6 +9,11 @@ import type { DevicePairingList } from "./controllers/devices.ts";
 import type { ExecApprovalRequest } from "./controllers/exec-approval.ts";
 import type { ExecApprovalsFile, ExecApprovalsSnapshot } from "./controllers/exec-approvals.ts";
 import type {
+  KnowledgePanelData,
+  KnowledgeActionResult,
+  IngestDryRunData,
+} from "./controllers/knowledge.ts";
+import type {
   ClawHubSearchResult,
   ClawHubSkillDetail,
   SkillMessage,
@@ -488,6 +493,16 @@ export type AppViewState = {
     handleOpenSidebar: (content: SidebarContent) => void;
     handleCloseSidebar: () => void;
     handleSplitRatioChange: (ratio: number) => void;
+    knowledgePanelLoading: boolean;
+    knowledgePanelError: string | null;
+    knowledgePanel: KnowledgePanelData | null;
+    knowledgeActionLoading: boolean;
+    knowledgeActionError: string | null;
+    knowledgeActionResult: KnowledgeActionResult | null;
+    knowledgeQuery: string;
+    knowledgeConfirmPending: { path: string; dryRunResult: IngestDryRunData } | null;
+    knowledgeConfirmExecuting: boolean;
+    knowledgeConfirmResult: string | null;
     webPushSupported: boolean;
     webPushPermission: NotificationPermission | "unsupported";
     webPushSubscribed: boolean;

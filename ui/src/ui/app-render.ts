@@ -95,6 +95,11 @@ import {
   saveExecApprovals,
   updateExecApprovalsFormValue,
 } from "./controllers/exec-approvals.ts";
+import {
+  loadKnowledgePanel,
+  runKnowledgeAction,
+  executeConfirmedIngest,
+} from "./controllers/knowledge.ts";
 import { loadLogs } from "./controllers/logs.ts";
 import { loadNodes } from "./controllers/nodes.ts";
 import { loadPresence } from "./controllers/presence.ts";
@@ -176,6 +181,7 @@ const lazyCron = createLazyView(() => import("./views/cron.ts"), notifyLazyViewC
 const lazyDebug = createLazyView(() => import("./views/debug.ts"), notifyLazyViewChanged);
 const lazyInstances = createLazyView(() => import("./views/instances.ts"), notifyLazyViewChanged);
 const lazyLogs = createLazyView(() => import("./views/logs.ts"), notifyLazyViewChanged);
+const lazyKnowledge = createLazyView(() => import("./views/knowledge.ts"), notifyLazyViewChanged);
 const lazyNodes = createLazyView(() => import("./views/nodes.ts"), notifyLazyViewChanged);
 const lazySessions = createLazyView(() => import("./views/sessions.ts"), notifyLazyViewChanged);
 const lazySkills = createLazyView(() => import("./views/skills.ts"), notifyLazyViewChanged);
@@ -2597,6 +2603,34 @@ export function renderApp(state: AppViewState) {
               onRepairDreamingArtifacts: () => repairDreamingArtifacts(state),
               onRequestUpdate: requestHostUpdate,
             })
+          : nothing}
+        ${state.tab === "knowledge"
+          ? renderLazyView(lazyKnowledge, (m) =>
+              m.renderKnowledge({
+                settings: state.settings,
+                connected: state.connected,
+                knowledgePanelLoading: state.knowledgePanelLoading,
+                knowledgePanelError: state.knowledgePanelError,
+                knowledgePanel: state.knowledgePanel,
+                knowledgeActionLoading: state.knowledgeActionLoading,
+                knowledgeActionError: state.knowledgeActionError,
+                knowledgeActionResult: state.knowledgeActionResult,
+                knowledgeQuery: state.knowledgeQuery,
+                knowledgeConfirmPending: state.knowledgeConfirmPending,
+                knowledgeConfirmExecuting: state.knowledgeConfirmExecuting,
+                knowledgeConfirmResult: state.knowledgeConfirmResult,
+                requestUpdate: requestHostUpdate,
+                onQueryChange: (q) => (state.knowledgeQuery = q),
+                onAction: (action, query) => void runKnowledgeAction(state, action, { query }),
+                onDryRun: (path) => void runKnowledgeAction(state, "ingest_dry_run", { path }),
+                onConfirmExecute: (path) => void executeConfirmedIngest(state, path),
+                onCancelConfirm: () => {
+                  state.knowledgeConfirmPending = null;
+                  state.knowledgeConfirmResult = null;
+                },
+                onRefresh: () => void loadKnowledgePanel(state),
+              }),
+            )
           : nothing}
       </main>
       ${renderExecApprovalPrompt(state)} ${renderGatewayUrlConfirmation(state)}

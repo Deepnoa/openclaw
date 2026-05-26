@@ -385,6 +385,7 @@ export const pl: TranslationMap = {
     debug: "Debug",
     logs: "Logi",
     dreams: "Sny",
+    knowledge: "Knowledge",
   },
   subtitles: {
     agents: "Obszary robocze, narzędzia, tożsamości.",
@@ -406,6 +407,7 @@ export const pl: TranslationMap = {
     debug: "Migawki, zdarzenia, RPC.",
     logs: "Logi Gateway na żywo.",
     dreams: "Konsolidacja pamięci podczas snu.",
+    knowledge: "Governed knowledge operations.",
   },
   overview: {
     access: {
@@ -963,6 +965,26 @@ export const pl: TranslationMap = {
     vi: "Tiếng Việt (wietnamski)",
     nl: "Nederlands (niderlandzki)",
     fa: "فارسی (perski)",
+  },
+  knowledge: {
+    title: "Knowledge Operations",
+    manifestCount: "manifest entries",
+    runtimePressure: "Runtime pressure",
+    discover: "Discover",
+    retrieve: "Retrieve",
+    propose: "Propose",
+    queryPlaceholder: "Search query…",
+    confirmExecute: "Confirm Execute",
+    confirmModal_title: "Confirm Governed Ingestion",
+    confirmModal_body: "Review governance decision and confirm execution.",
+    confirmModal_proceed: "Execute",
+    confirmModal_cancel: "Anuluj",
+    badge_allowed: "Allowed",
+    badge_blocked: "Blocked",
+    badge_review: "Review Required",
+    badge_dryRun: "Dry-Run Ready",
+    badge_critical: "Critical",
+    badge_retrieved: "Retrieved",
   },
   cron: {
     quickCreate: {

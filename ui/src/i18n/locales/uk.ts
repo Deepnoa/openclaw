@@ -385,6 +385,7 @@ export const uk: TranslationMap = {
     debug: "Налагодження",
     logs: "Журнали",
     dreams: "Сни",
+    knowledge: "Knowledge",
   },
   subtitles: {
     agents: "Робочі простори, інструменти, ідентичності.",
@@ -406,6 +407,7 @@ export const uk: TranslationMap = {
     debug: "Знімки, події, RPC.",
     logs: "Журнали шлюзу в реальному часі.",
     dreams: "Консолідація пам’яті під час сну.",
+    knowledge: "Governed knowledge operations.",
   },
   overview: {
     access: {
@@ -961,6 +963,26 @@ export const uk: TranslationMap = {
     vi: "Tiếng Việt (вʼєтнамська)",
     nl: "Nederlands (нідерландська)",
     fa: "فارسی (перська)",
+  },
+  knowledge: {
+    title: "Knowledge Operations",
+    manifestCount: "manifest entries",
+    runtimePressure: "Runtime pressure",
+    discover: "Discover",
+    retrieve: "Retrieve",
+    propose: "Propose",
+    queryPlaceholder: "Search query…",
+    confirmExecute: "Confirm Execute",
+    confirmModal_title: "Confirm Governed Ingestion",
+    confirmModal_body: "Review governance decision and confirm execution.",
+    confirmModal_proceed: "Execute",
+    confirmModal_cancel: "Скасувати",
+    badge_allowed: "Allowed",
+    badge_blocked: "Blocked",
+    badge_review: "Review Required",
+    badge_dryRun: "Dry-Run Ready",
+    badge_critical: "Critical",
+    badge_retrieved: "Retrieved",
   },
   cron: {
     quickCreate: {

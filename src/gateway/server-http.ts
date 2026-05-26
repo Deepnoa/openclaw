@@ -68,6 +68,24 @@ let openResponsesHttpModulePromise: Promise<typeof import("./openresponses-http.
 let sessionHistoryHttpModulePromise:
   | Promise<typeof import("./sessions-history-http.js")>
   | undefined;
+let nasManifestHealthHttpModulePromise:
+  | Promise<typeof import("./nas-manifest-health-http.js")>
+  | undefined;
+let nasIngestGovernedFileHttpModulePromise:
+  | Promise<typeof import("./nas-ingest-governed-file-http.js")>
+  | undefined;
+let nasRetrieveGovernedHttpModulePromise:
+  | Promise<typeof import("./nas-retrieve-governed-http.js")>
+  | undefined;
+let nasDiscoverFilesHttpModulePromise:
+  | Promise<typeof import("./nas-discover-files-http.js")>
+  | undefined;
+let nasKnowledgeAssistHttpModulePromise:
+  | Promise<typeof import("./nas-knowledge-assist-http.js")>
+  | undefined;
+let nasKnowledgePanelHttpModulePromise:
+  | Promise<typeof import("./nas-knowledge-panel-http.js")>
+  | undefined;
 let internalStateHttpModulePromise: Promise<typeof import("./internal-state-http.js")> | undefined;
 let sessionKillHttpModulePromise: Promise<typeof import("./session-kill-http.js")> | undefined;
 let toolsInvokeHttpModulePromise: Promise<typeof import("./tools-invoke-http.js")> | undefined;
@@ -118,6 +136,36 @@ function getOpenResponsesHttpModule() {
 function getSessionHistoryHttpModule() {
   sessionHistoryHttpModulePromise ??= import("./sessions-history-http.js");
   return sessionHistoryHttpModulePromise;
+}
+
+function getNasManifestHealthHttpModule() {
+  nasManifestHealthHttpModulePromise ??= import("./nas-manifest-health-http.js");
+  return nasManifestHealthHttpModulePromise;
+}
+
+function getNasIngestGovernedFileHttpModule() {
+  nasIngestGovernedFileHttpModulePromise ??= import("./nas-ingest-governed-file-http.js");
+  return nasIngestGovernedFileHttpModulePromise;
+}
+
+function getNasRetrieveGovernedHttpModule() {
+  nasRetrieveGovernedHttpModulePromise ??= import("./nas-retrieve-governed-http.js");
+  return nasRetrieveGovernedHttpModulePromise;
+}
+
+function getNasDiscoverFilesHttpModule() {
+  nasDiscoverFilesHttpModulePromise ??= import("./nas-discover-files-http.js");
+  return nasDiscoverFilesHttpModulePromise;
+}
+
+function getNasKnowledgeAssistHttpModule() {
+  nasKnowledgeAssistHttpModulePromise ??= import("./nas-knowledge-assist-http.js");
+  return nasKnowledgeAssistHttpModulePromise;
+}
+
+function getNasKnowledgePanelHttpModule() {
+  nasKnowledgePanelHttpModulePromise ??= import("./nas-knowledge-panel-http.js");
+  return nasKnowledgePanelHttpModulePromise;
 }
 
 function getInternalStateHttpModule() {
@@ -218,6 +266,30 @@ function isOpenResponsesPath(pathname: string): boolean {
 
 function isToolsInvokePath(pathname: string): boolean {
   return pathname === "/tools/invoke";
+}
+
+function isNasManifestHealthPath(pathname: string): boolean {
+  return pathname === "/nas/manifest-health";
+}
+
+function isNasIngestGovernedFilePath(pathname: string): boolean {
+  return pathname === "/nas/ingest-governed-file";
+}
+
+function isNasRetrieveGovernedPath(pathname: string): boolean {
+  return pathname === "/nas/retrieve-governed";
+}
+
+function isNasDiscoverFilesPath(pathname: string): boolean {
+  return pathname === "/nas/discover-files";
+}
+
+function isNasKnowledgeAssistPath(pathname: string): boolean {
+  return pathname === "/nas/knowledge-assist";
+}
+
+function isNasKnowledgePanelPath(pathname: string): boolean {
+  return pathname === "/nas/knowledge-panel";
 }
 
 function isManagedOutgoingImagePath(pathname: string): boolean {
@@ -623,6 +695,90 @@ export function createGatewayHttpServer(opts: {
           name: "tools-invoke",
           run: async () =>
             (await getToolsInvokeHttpModule()).handleToolsInvokeHttpRequest(req, res, {
+              auth: resolvedAuth,
+              trustedProxies,
+              allowRealIpFallback,
+              rateLimiter,
+            }),
+        });
+      }
+      if (isNasManifestHealthPath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-manifest-health",
+          run: async () =>
+            (await getNasManifestHealthHttpModule()).handleNasManifestHealthHttpRequest(req, res, {
+              auth: resolvedAuth,
+              trustedProxies,
+              allowRealIpFallback,
+              rateLimiter,
+            }),
+        });
+      }
+      if (isNasIngestGovernedFilePath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-ingest-governed-file",
+          run: async () =>
+            (await getNasIngestGovernedFileHttpModule()).handleNasIngestGovernedFileHttpRequest(
+              req,
+              res,
+              {
+                auth: resolvedAuth,
+                trustedProxies,
+                allowRealIpFallback,
+                rateLimiter,
+              },
+            ),
+        });
+      }
+      if (isNasRetrieveGovernedPath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-retrieve-governed",
+          run: async () =>
+            (await getNasRetrieveGovernedHttpModule()).handleNasRetrieveGovernedHttpRequest(
+              req,
+              res,
+              {
+                auth: resolvedAuth,
+                trustedProxies,
+                allowRealIpFallback,
+                rateLimiter,
+              },
+            ),
+        });
+      }
+      if (isNasDiscoverFilesPath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-discover-files",
+          run: async () =>
+            (await getNasDiscoverFilesHttpModule()).handleNasDiscoverFilesHttpRequest(req, res, {
+              auth: resolvedAuth,
+              trustedProxies,
+              allowRealIpFallback,
+              rateLimiter,
+            }),
+        });
+      }
+      if (isNasKnowledgeAssistPath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-knowledge-assist",
+          run: async () =>
+            (await getNasKnowledgeAssistHttpModule()).handleNasKnowledgeAssistHttpRequest(
+              req,
+              res,
+              {
+                auth: resolvedAuth,
+                trustedProxies,
+                allowRealIpFallback,
+                rateLimiter,
+              },
+            ),
+        });
+      }
+      if (isNasKnowledgePanelPath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-knowledge-panel",
+          run: async () =>
+            (await getNasKnowledgePanelHttpModule()).handleNasKnowledgePanelHttpRequest(req, res, {
               auth: resolvedAuth,
               trustedProxies,
               allowRealIpFallback,

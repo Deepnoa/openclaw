@@ -25,6 +25,8 @@ import { healthHandlers } from "./server-methods/health.js";
 import { logsHandlers } from "./server-methods/logs.js";
 import { modelsAuthStatusHandlers } from "./server-methods/models-auth-status.js";
 import { modelsHandlers } from "./server-methods/models.js";
+import { nasIngestGovernedFileHandlers } from "./server-methods/nas-ingest-governed-file.js";
+import { nasManifestHealthHandlers } from "./server-methods/nas-manifest-health.js";
 import { nativeHookRelayHandlers } from "./server-methods/native-hook-relay.js";
 import { nodePendingHandlers } from "./server-methods/nodes-pending.js";
 import { nodeHandlers } from "./server-methods/nodes.js";
@@ -99,6 +101,8 @@ export const coreGatewayHandlers: GatewayRequestHandlers = {
   ...execApprovalsHandlers,
   ...webHandlers,
   ...modelsHandlers,
+  ...nasManifestHealthHandlers,
+  ...nasIngestGovernedFileHandlers,
   ...modelsAuthStatusHandlers,
   ...nativeHookRelayHandlers,
   ...pluginHostHookHandlers,

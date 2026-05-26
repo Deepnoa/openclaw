@@ -1,0 +1,337 @@
+/* ===========================================
+   Knowledge Operations Panel
+   =========================================== */
+
+.kn-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  box-sizing: border-box;
+}
+
+/* ---- Status bar ---- */
+
+.kn-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 12px;
+  background: color-mix(in oklab, var(--panel) 80%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+}
+
+.kn-status-bar__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kn-status-bar__right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kn-label {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text);
+}
+
+.kn-last-updated {
+  font-size: 11px;
+  padding: 0 2px;
+}
+
+/* ---- Action bar ---- */
+
+.kn-action-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+.kn-query-input {
+  flex: 1;
+  min-width: 160px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  outline: none;
+  transition: border-color 120ms ease;
+}
+
+.kn-query-input:focus {
+  border-color: var(--accent);
+}
+
+.kn-query-input::placeholder {
+  color: var(--muted);
+}
+
+/* ---- Buttons ---- */
+
+.kn-action-btn {
+  padding: 5px 12px;
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 500;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-fg, #fff);
+  cursor: pointer;
+  transition:
+    opacity 120ms ease,
+    background 120ms ease;
+  white-space: nowrap;
+}
+
+.kn-action-btn:hover:not(:disabled) {
+  opacity: 0.85;
+}
+
+.kn-action-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.kn-action-btn--secondary {
+  background: transparent;
+  color: var(--text);
+  border-color: var(--border);
+}
+
+.kn-action-btn--secondary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--panel) 60%, transparent);
+  opacity: 1;
+}
+
+.kn-action-btn--danger {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: #fff;
+}
+
+/* ---- Badges ---- */
+
+.kn-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 7px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--muted);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.kn-badge--allowed {
+  background: var(--ok);
+}
+
+.kn-badge--blocked {
+  background: var(--danger);
+}
+
+.kn-badge--review {
+  background: var(--warn);
+  color: var(--text);
+}
+
+.kn-badge--dry-run {
+  background: color-mix(in oklab, var(--accent) 70%, transparent);
+  color: var(--text);
+}
+
+/* ---- Muted text ---- */
+
+.kn-muted {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.kn-explain {
+  font-style: italic;
+}
+
+.kn-loading {
+  padding: 8px 0;
+}
+
+.kn-error {
+  font-size: 12px;
+  color: var(--danger);
+  padding: 4px 0;
+}
+
+/* ---- Section ---- */
+
+.kn-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kn-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 2px 0;
+}
+
+/* ---- Results ---- */
+
+.kn-results {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.kn-results__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kn-result-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ---- Candidate card ---- */
+
+.kn-candidate-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--panel) 60%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.kn-candidate-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kn-candidate-card__name {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+}
+
+.kn-candidate-card__path {
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.kn-candidate-card__action-hint {
+  font-size: 11px;
+}
+
+/* ---- Manifest card ---- */
+
+.kn-manifest-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--panel) 60%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.kn-manifest-card--blocked {
+  opacity: 0.7;
+  border-color: var(--danger);
+}
+
+.kn-manifest-card__header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kn-manifest-card__title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kn-manifest-card__meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.kn-manifest-card__summary {
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.kn-manifest-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 360px;
+  overflow-y: auto;
+}
+
+/* ---- Confirm area ---- */
+
+.kn-confirm-area {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.kn-confirm-result {
+  font-size: 12px;
+  color: var(--ok);
+  margin-top: 4px;
+}
+
+/* ---- Activity row ---- */
+
+.kn-activity-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 4px 0;
+}
