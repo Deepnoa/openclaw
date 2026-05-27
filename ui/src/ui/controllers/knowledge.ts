@@ -111,8 +111,12 @@ function gatewayFetch(
   path: string,
   opts?: RequestInit,
 ): Promise<Response> {
-  const base = gatewayUrl.replace(/\/$/, "");
-  return fetch(`${base}${path}`, {
+  // settings.gatewayUrl is a WebSocket URL (ws:// or wss://); convert to HTTP for fetch().
+  const httpBase = gatewayUrl
+    .replace(/\/$/, "")
+    .replace(/^wss:\/\//, "https://")
+    .replace(/^ws:\/\//, "http://");
+  return fetch(`${httpBase}${path}`, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
