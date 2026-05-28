@@ -59,7 +59,8 @@ export type RetrievalEntry = {
   title: string;
   sensitivity?: string;
   lifecycle_state?: string;
-  summary?: string;
+  // API returns either a plain string or a bounded summary object (never raw content)
+  summary?: string | Record<string, unknown>;
   blocked_reason?: string;
   explainability?: { why_retrieval_decision?: string };
 };
@@ -126,6 +127,18 @@ function gatewayFetch(
   });
 }
 
+function extractErrorMessage(
+  err: string | Record<string, unknown> | unknown,
+  fallback: string,
+): string {
+  if (typeof err === "string") return err;
+  if (err && typeof err === "object") {
+    const e = err as Record<string, unknown>;
+    if (typeof e.message === "string") return e.message;
+  }
+  return fallback;
+}
+
 // ── Controllers ────────────────────────────────────────────────────────────
 
 export async function loadKnowledgePanel(state: KnowledgeState): Promise<void> {
@@ -138,8 +151,10 @@ export async function loadKnowledgePanel(state: KnowledgeState): Promise<void> {
       "/nas/knowledge-panel",
     );
     if (!res.ok) {
-      const body = (await res.json().catch(() => null)) as { error?: string } | null;
-      state.knowledgePanelError = body?.error ?? `HTTP ${res.status}`;
+      const body = (await res.json().catch(() => null)) as {
+        error?: string | Record<string, unknown>;
+      } | null;
+      state.knowledgePanelError = extractErrorMessage(body?.error, `HTTP ${res.status}`);
       return;
     }
     const data = (await res.json()) as { ok: boolean; panel: KnowledgePanelData };
@@ -183,10 +198,10 @@ export async function runKnowledgeAction(
       action?: string;
       classification?: string;
       result?: Record<string, unknown>;
-      error?: string;
+      error?: string | Record<string, unknown>;
     };
     if (!data.ok) {
-      state.knowledgeActionError = data.error ?? `HTTP ${res.status}`;
+      state.knowledgeActionError = extractErrorMessage(data.error, `HTTP ${res.status}`);
       return;
     }
     const result: KnowledgeActionResult = {

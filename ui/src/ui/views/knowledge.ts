@@ -112,6 +112,22 @@ function renderCandidateCard(candidate: CandidateFile, onDryRun: (path: string) 
   `;
 }
 
+function renderSummary(summary: string | Record<string, unknown>) {
+  if (typeof summary === "string") {
+    return html`<div class="kn-manifest-card__summary">${summary}</div>`;
+  }
+  const title = typeof summary.title_guess === "string" ? summary.title_guess : null;
+  const keywords = Array.isArray(summary.keywords_guess)
+    ? (summary.keywords_guess as string[]).join(", ")
+    : null;
+  const basis = typeof summary.summary_basis === "string" ? summary.summary_basis : null;
+  return html`<div class="kn-manifest-card__summary">
+    ${title ? html`<span class="kn-summary-title">${title}</span>` : nothing}
+    ${keywords ? html`<span class="kn-muted kn-summary-keywords">${keywords}</span>` : nothing}
+    ${basis ? html`<span class="kn-muted kn-summary-basis">${basis}</span>` : nothing}
+  </div>`;
+}
+
 function renderRetrievalEntry(entry: RetrievalEntry) {
   const isBlocked = Boolean(entry.blocked_reason);
   return html`
@@ -128,9 +144,7 @@ function renderRetrievalEntry(entry: RetrievalEntry) {
       ${isBlocked
         ? html`<div class="kn-muted">${entry.blocked_reason}</div>`
         : html`
-            ${entry.summary
-              ? html`<div class="kn-manifest-card__summary">${entry.summary}</div>`
-              : nothing}
+            ${entry.summary ? renderSummary(entry.summary) : nothing}
             ${entry.explainability?.why_retrieval_decision
               ? html`<div class="kn-muted kn-explain">
                   ${entry.explainability.why_retrieval_decision}
