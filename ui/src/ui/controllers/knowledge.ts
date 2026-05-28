@@ -109,15 +109,75 @@ export type KnowledgeState = {
 
 // ── Fetch helpers ──────────────────────────────────────────────────────────
 
+// Reads the session token directly from sessionStorage as a fallback when the
+// in-memory state (hello.auth.deviceToken, settings.token, password) is not yet
+// populated — e.g. on first load before applySettings has run, or after a gateway
+// restart where the Lit element was initialized before the token was re-persisted.
+// Uses the same key format as storage.ts#tokenSessionKeyForGateway.
+function sessionStorageFallbackToken(gatewayUrl: string): string | null {
+  try {
+    if (typeof sessionStorage === "undefined") return null;
+    const parsed = new URL(gatewayUrl);
+    const pathname = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/+$/, "");
+    const scope = `${parsed.protocol}//${parsed.host}${pathname}`;
+    const key = `openclaw.control.token.v1:${scope}`;
+    const raw = sessionStorage.getItem(key)?.trim() ?? null;
+    if (!raw) return null;
+    // Reject tokens that would smuggle CR/LF into the HTTP header (same check as sanitizeHeaderToken).
+    return /[\r\n]/.test(raw) ? null : raw;
+  } catch {
+    return null;
+  }
+}
+
+// Resolves the Authorization header for HTTP NAS requests.
+// IMPORTANT: hello.auth.deviceToken must NOT take priority here.
+// Device tokens from the WebSocket hello are issued by the gateway for WS session
+// management and device pairing — they are a different credential type from the
+// gateway shared secret (gateway.auth.token / gateway.auth.password).
+// HTTP endpoints in token/password mode validate against the shared secret only;
+// device tokens are tried last-resort so pure device-auth deployments still work.
+// Priority order: settings.token → password → sessionStorage → hello.auth.deviceToken
+function resolveKnowledgeHttpAuthHeader(state: KnowledgeState): {
+  header: string | null;
+  source: "settings" | "password" | "sessionStorage" | "deviceToken" | "none";
+} {
+  if (state.settings?.token?.trim()) {
+    const header = `Bearer ${state.settings.token.trim()}`;
+    return { header, source: "settings" };
+  }
+  if (state.password?.trim()) {
+    const header = `Bearer ${state.password.trim()}`;
+    return { header, source: "password" };
+  }
+  const ssToken = sessionStorageFallbackToken(state.settings.gatewayUrl);
+  if (ssToken) {
+    return { header: `Bearer ${ssToken}`, source: "sessionStorage" };
+  }
+  // Device token from WebSocket hello — last resort for pure device-auth deployments
+  // where no shared secret is configured. Requires a valid, non-expired device pairing.
+  const deviceToken = state.hello?.auth?.deviceToken?.trim();
+  if (deviceToken) {
+    return { header: `Bearer ${deviceToken}`, source: "deviceToken" };
+  }
+  return { header: null, source: "none" };
+}
+
 function gatewayFetch(state: KnowledgeState, path: string, opts?: RequestInit): Promise<Response> {
   // settings.gatewayUrl is a WebSocket URL (ws:// or wss://); convert to HTTP for fetch().
   const httpBase = state.settings.gatewayUrl
     .replace(/\/$/, "")
     .replace(/^wss:\/\//, "https://")
     .replace(/^ws:\/\//, "http://");
-  // Use resolveControlUiAuthHeader so hello.auth.deviceToken (the live WebSocket session
-  // token) takes priority over settings.token (sessionStorage), then password.
-  const authHeader = resolveControlUiAuthHeader(state);
+  const { header: authHeader, source: authSource } = resolveKnowledgeHttpAuthHeader(state);
+  console.debug("[kp:fetch]", {
+    path,
+    hasSettingsToken: Boolean(state.settings?.token?.trim()),
+    hasHelloDeviceToken: Boolean(state.hello?.auth?.deviceToken),
+    hasPassword: Boolean(state.password?.trim()),
+    authHeaderPresent: Boolean(authHeader),
+    authSource,
+  });
   return fetch(`${httpBase}${path}`, {
     ...opts,
     headers: {
@@ -143,25 +203,38 @@ function extractErrorMessage(
 // ── Controllers ────────────────────────────────────────────────────────────
 
 export async function loadKnowledgePanel(state: KnowledgeState): Promise<void> {
+  const callId = Math.random().toString(36).slice(2, 6);
+  console.debug(`[kp:${callId}] start`, {
+    hasToken: Boolean(state.settings?.token?.trim()),
+    hasDeviceToken: Boolean(state.hello?.auth?.deviceToken),
+    prevError: state.knowledgePanelError,
+    prevPanel: Boolean(state.knowledgePanel),
+    connected: state.connected,
+  });
   state.knowledgePanelLoading = true;
   state.knowledgePanelError = null;
   try {
     const res = await gatewayFetch(state, "/nas/knowledge-panel");
+    console.debug(`[kp:${callId}] fetch status=${res.status} ok=${res.ok}`);
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as {
         error?: string | Record<string, unknown>;
       } | null;
       state.knowledgePanelError = extractErrorMessage(body?.error, `HTTP ${res.status}`);
+      console.debug(`[kp:${callId}] set error: ${state.knowledgePanelError}`);
       return;
     }
     const data = (await res.json()) as { ok: boolean; panel: KnowledgePanelData };
     if (data.ok && data.panel) {
       state.knowledgePanel = data.panel;
+      console.debug(`[kp:${callId}] panel OK manifest_count=${data.panel.safe_manifest_count}`);
     } else {
       state.knowledgePanelError = "Unexpected response from /nas/knowledge-panel";
+      console.debug(`[kp:${callId}] unexpected response`, data);
     }
   } catch (err) {
     state.knowledgePanelError = err instanceof Error ? err.message : String(err);
+    console.debug(`[kp:${callId}] exception: ${state.knowledgePanelError}`);
   } finally {
     state.knowledgePanelLoading = false;
   }
