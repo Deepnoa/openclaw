@@ -1,3 +1,4 @@
+import { resolveControlUiAuthHeader } from "../control-ui-auth.ts";
 import type { UiSettings } from "../storage.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -91,6 +92,8 @@ export type KnowledgeActionResult = {
 
 export type KnowledgeState = {
   settings: UiSettings;
+  hello?: { auth?: { deviceToken?: string | null } | null } | null;
+  password?: string | null;
   connected: boolean;
   knowledgePanelLoading: boolean;
   knowledgePanelError: string | null;
@@ -106,22 +109,20 @@ export type KnowledgeState = {
 
 // ── Fetch helpers ──────────────────────────────────────────────────────────
 
-function gatewayFetch(
-  gatewayUrl: string,
-  token: string,
-  path: string,
-  opts?: RequestInit,
-): Promise<Response> {
+function gatewayFetch(state: KnowledgeState, path: string, opts?: RequestInit): Promise<Response> {
   // settings.gatewayUrl is a WebSocket URL (ws:// or wss://); convert to HTTP for fetch().
-  const httpBase = gatewayUrl
+  const httpBase = state.settings.gatewayUrl
     .replace(/\/$/, "")
     .replace(/^wss:\/\//, "https://")
     .replace(/^ws:\/\//, "http://");
+  // Use resolveControlUiAuthHeader so hello.auth.deviceToken (the live WebSocket session
+  // token) takes priority over settings.token (sessionStorage), then password.
+  const authHeader = resolveControlUiAuthHeader(state);
   return fetch(`${httpBase}${path}`, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
+      ...(authHeader ? { Authorization: authHeader } : {}),
       ...(opts?.headers ?? {}),
     },
   });
@@ -145,11 +146,7 @@ export async function loadKnowledgePanel(state: KnowledgeState): Promise<void> {
   state.knowledgePanelLoading = true;
   state.knowledgePanelError = null;
   try {
-    const res = await gatewayFetch(
-      state.settings.gatewayUrl,
-      state.settings.token,
-      "/nas/knowledge-panel",
-    );
+    const res = await gatewayFetch(state, "/nas/knowledge-panel");
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as {
         error?: string | Record<string, unknown>;
@@ -187,12 +184,10 @@ export async function runKnowledgeAction(
     if (opts.id) body.id = opts.id;
     if (opts.limit) body.limit = opts.limit;
 
-    const res = await gatewayFetch(
-      state.settings.gatewayUrl,
-      state.settings.token,
-      "/nas/knowledge-assist",
-      { method: "POST", body: JSON.stringify(body) },
-    );
+    const res = await gatewayFetch(state, "/nas/knowledge-assist", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
     const data = (await res.json()) as {
       ok: boolean;
       action?: string;
@@ -283,15 +278,10 @@ export async function executeConfirmedIngest(
   state.knowledgeConfirmExecuting = true;
   state.knowledgeConfirmResult = null;
   try {
-    const res = await gatewayFetch(
-      state.settings.gatewayUrl,
-      state.settings.token,
-      "/nas/ingest-governed-file",
-      {
-        method: "POST",
-        body: JSON.stringify({ path: filePath, mode: "execute", confirm: true }),
-      },
-    );
+    const res = await gatewayFetch(state, "/nas/ingest-governed-file", {
+      method: "POST",
+      body: JSON.stringify({ path: filePath, mode: "execute", confirm: true }),
+    });
     const data = (await res.json()) as { ok: boolean; decision?: string; error?: string };
     if (data.ok) {
       state.knowledgeConfirmResult = `Ingested: ${data.decision ?? "allowed"}`;
