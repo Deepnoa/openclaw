@@ -2,8 +2,10 @@ import { html, nothing } from "lit";
 import { t } from "../../i18n/index.ts";
 import type {
   CandidateFile,
+  ConsumptionStats,
   IngestDryRunData,
   KnowledgeActionResult,
+  KnowledgeGraphData,
   KnowledgePanelData,
   ManifestDetailData,
   ManifestEntry,
@@ -28,6 +30,13 @@ export type KnowledgeProps = {
   knowledgeManifestDetail: ManifestDetailData | null;
   knowledgeManifestDetailLoading: boolean;
   knowledgeManifestDetailError: string | null;
+  knowledgeGraph: KnowledgeGraphData | null;
+  knowledgeGraphLoading: boolean;
+  knowledgeGraphError: string | null;
+  knowledgeGraphFilter: { nodeType: string | null; relation: string | null };
+  knowledgeConsumptionStats: ConsumptionStats | null;
+  knowledgeConsumptionStatsLoading: boolean;
+  knowledgeConsumptionStatsError: string | null;
   requestUpdate: () => void;
   onQueryChange: (q: string) => void;
   onAction: (
@@ -40,6 +49,7 @@ export type KnowledgeProps = {
   onRefresh: () => void;
   onManifestSelect: (id: string) => void;
   onManifestDetailClose: () => void;
+  onGraphFilterChange: (filter: { nodeType: string | null; relation: string | null }) => void;
 };
 
 // ── Pressure badge ─────────────────────────────────────────────────────────
@@ -442,6 +452,29 @@ function renderManifestDetail(props: KnowledgeProps) {
                   </div>
                 </div>
 
+                <!-- Usage metrics (Phase B Item 5) -->
+                ${detail?.usage
+                  ? html`<div class="kn-detail-section">
+                      <div class="kn-detail-section__label">${t("knowledge.detailUsage")}</div>
+                      <div class="kn-detail-row">
+                        <span class="kn-detail-key">${t("knowledge.usageRetrievalCount")}</span>
+                        <span>${detail.usage.retrieval_count}</span>
+                      </div>
+                      ${detail.usage.first_retrieved
+                        ? html`<div class="kn-detail-row">
+                            <span class="kn-detail-key">${t("knowledge.usageFirstRetrieved")}</span>
+                            <span class="kn-muted">${detail.usage.first_retrieved}</span>
+                          </div>`
+                        : nothing}
+                      ${detail.usage.last_retrieved
+                        ? html`<div class="kn-detail-row">
+                            <span class="kn-detail-key">${t("knowledge.usageLastRetrieved")}</span>
+                            <span class="kn-muted">${detail.usage.last_retrieved}</span>
+                          </div>`
+                        : nothing}
+                    </div>`
+                  : nothing}
+
                 <!-- Section 3: Retrieval History -->
                 <div class="kn-detail-section">
                   <div class="kn-detail-section__label">
@@ -509,6 +542,215 @@ function renderManifestDetail(props: KnowledgeProps) {
               `
             : html`<div class="kn-muted">${t("knowledge.detailNoData")}</div>`}
     </aside>
+  `;
+}
+
+// ── Runtime reference graph (Item 4a) — table view only ──────────────────────
+
+function renderKnowledgeGraph(props: KnowledgeProps) {
+  const { knowledgeGraph, knowledgeGraphLoading, knowledgeGraphError, knowledgeGraphFilter } =
+    props;
+  if (knowledgeGraphLoading && !knowledgeGraph) {
+    return html`<div class="kn-section">
+      <div class="kn-section-label">${t("knowledge.graphTitle")}</div>
+      <div class="kn-muted kn-loading">${t("knowledge.graphLoading")}</div>
+    </div>`;
+  }
+  if (knowledgeGraphError) {
+    return html`<div class="kn-section">
+      <div class="kn-section-label">${t("knowledge.graphTitle")}</div>
+      <div class="kn-error">${knowledgeGraphError}</div>
+    </div>`;
+  }
+  if (!knowledgeGraph) {
+    return nothing;
+  }
+
+  const nodeById = new Map(knowledgeGraph.nodes.map((n) => [n.id, n]));
+  const relationsPresent = [...new Set(knowledgeGraph.edges.map((e) => e.relation))].sort();
+  const nodeTypesPresent = [...new Set(knowledgeGraph.nodes.map((n) => n.type))].sort();
+
+  const matchesFilter = (edge: (typeof knowledgeGraph.edges)[number]): boolean => {
+    if (knowledgeGraphFilter.relation && edge.relation !== knowledgeGraphFilter.relation) {
+      return false;
+    }
+    if (knowledgeGraphFilter.nodeType) {
+      const s = nodeById.get(edge.source)?.type;
+      const tt = nodeById.get(edge.target)?.type;
+      if (s !== knowledgeGraphFilter.nodeType && tt !== knowledgeGraphFilter.nodeType) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  const rows = knowledgeGraph.edges.filter(matchesFilter);
+
+  return html`
+    <div class="kn-section">
+      <div class="kn-section-label">
+        ${t("knowledge.graphTitle")} (${knowledgeGraph.node_count} ${t("knowledge.graphNodes")},
+        ${knowledgeGraph.edge_count} ${t("knowledge.graphEdges")})
+      </div>
+
+      <div class="kn-graph-filters">
+        <select
+          class="kn-graph-filter"
+          @change=${(e: Event) =>
+            props.onGraphFilterChange({
+              ...knowledgeGraphFilter,
+              nodeType: (e.target as HTMLSelectElement).value || null,
+            })}
+        >
+          <option value="" ?selected=${!knowledgeGraphFilter.nodeType}>
+            ${t("knowledge.graphAllNodeTypes")}
+          </option>
+          ${nodeTypesPresent.map(
+            (nt) =>
+              html`<option value=${nt} ?selected=${knowledgeGraphFilter.nodeType === nt}>
+                ${nt}
+              </option>`,
+          )}
+        </select>
+        <select
+          class="kn-graph-filter"
+          @change=${(e: Event) =>
+            props.onGraphFilterChange({
+              ...knowledgeGraphFilter,
+              relation: (e.target as HTMLSelectElement).value || null,
+            })}
+        >
+          <option value="" ?selected=${!knowledgeGraphFilter.relation}>
+            ${t("knowledge.graphAllRelations")}
+          </option>
+          ${relationsPresent.map(
+            (r) =>
+              html`<option value=${r} ?selected=${knowledgeGraphFilter.relation === r}>
+                ${r}
+              </option>`,
+          )}
+        </select>
+      </div>
+
+      ${rows.length
+        ? html`<table class="kn-graph-table">
+            <thead>
+              <tr>
+                <th>${t("knowledge.graphSource")}</th>
+                <th>${t("knowledge.graphRelation")}</th>
+                <th>${t("knowledge.graphTarget")}</th>
+                <th>${t("knowledge.graphTimestamp")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((edge) => {
+                const sourceNode = nodeById.get(edge.source);
+                const targetNode = nodeById.get(edge.target);
+                return html`<tr>
+                  <td>
+                    <span class="kn-graph-node-type kn-graph-node-type--${sourceNode?.type ?? ""}"
+                      >${sourceNode?.type ?? "?"}</span
+                    >
+                    ${sourceNode?.label ?? edge.source}
+                  </td>
+                  <td><span class="kn-badge kn-badge--dry-run">${edge.relation}</span></td>
+                  <td>
+                    <span class="kn-graph-node-type kn-graph-node-type--${targetNode?.type ?? ""}"
+                      >${targetNode?.type ?? "?"}</span
+                    >
+                    ${targetNode?.label ?? edge.target}
+                  </td>
+                  <td class="kn-muted">${edge.timestamp ?? "—"}</td>
+                </tr>`;
+              })}
+            </tbody>
+          </table>`
+        : html`<div class="kn-muted">${t("knowledge.graphNoEdges")}</div>`}
+    </div>
+  `;
+}
+
+// ── Usage stats (Item 5) ─────────────────────────────────────────────────────
+
+function renderUsageStats(props: KnowledgeProps) {
+  const {
+    knowledgeConsumptionStats,
+    knowledgeConsumptionStatsLoading,
+    knowledgeConsumptionStatsError,
+  } = props;
+  if (knowledgeConsumptionStatsLoading && !knowledgeConsumptionStats) {
+    return html`<div class="kn-section">
+      <div class="kn-section-label">${t("knowledge.usageTitle")}</div>
+      <div class="kn-muted kn-loading">${t("knowledge.usageLoading")}</div>
+    </div>`;
+  }
+  if (knowledgeConsumptionStatsError) {
+    return html`<div class="kn-section">
+      <div class="kn-section-label">${t("knowledge.usageTitle")}</div>
+      <div class="kn-error">${knowledgeConsumptionStatsError}</div>
+    </div>`;
+  }
+  const stats = knowledgeConsumptionStats;
+  if (!stats) {
+    return nothing;
+  }
+  return html`
+    <div class="kn-section">
+      <div class="kn-section-label">${t("knowledge.usageTitle")} (${stats.window_days}d)</div>
+      <div class="kn-usage-metrics">
+        <div class="kn-usage-metric">
+          <span class="kn-usage-value">${stats.total_retrievals}</span>
+          <span class="kn-muted">${t("knowledge.usageTotalRetrievals")}</span>
+        </div>
+        <div class="kn-usage-metric">
+          <span class="kn-usage-value">${stats.total_discoveries}</span>
+          <span class="kn-muted">${t("knowledge.usageTotalDiscoveries")}</span>
+        </div>
+        <div class="kn-usage-metric">
+          <span class="kn-usage-value ${stats.blocked_attempts ? "kn-usage-value--warn" : ""}"
+            >${stats.blocked_attempts}</span
+          >
+          <span class="kn-muted">${t("knowledge.usageBlockedAttempts")}</span>
+        </div>
+        <div class="kn-usage-metric">
+          <span class="kn-usage-value ${stats.stale_references ? "kn-usage-value--warn" : ""}"
+            >${stats.stale_references}</span
+          >
+          <span class="kn-muted">${t("knowledge.usageStaleReferences")}</span>
+        </div>
+      </div>
+
+      ${stats.top_manifests.length
+        ? html`<div class="kn-usage-block">
+            <div class="kn-usage-block__label">${t("knowledge.usageTopManifests")}</div>
+            ${stats.top_manifests.map(
+              (m) => html`<div class="kn-usage-row">
+                <button class="kn-related-link" @click=${() => props.onManifestSelect(m.id)}>
+                  ${m.title || m.id}
+                </button>
+                <span class="kn-muted">${m.count} ${t("knowledge.retrieved")}</span>
+              </div>`,
+            )}
+          </div>`
+        : nothing}
+      ${stats.unused_manifests.length
+        ? html`<div class="kn-usage-block">
+            <div class="kn-usage-block__label">
+              ${t("knowledge.usageUnusedManifests")} (${stats.unused_manifests.length})
+            </div>
+            <div class="kn-usage-unused">
+              ${stats.unused_manifests.map(
+                (id) => html`<button
+                  class="kn-related-link"
+                  @click=${() => props.onManifestSelect(id)}
+                >
+                  ${id}
+                </button>`,
+              )}
+            </div>
+          </div>`
+        : nothing}
+    </div>
   `;
 }
 
@@ -639,6 +881,12 @@ export function renderKnowledge(props: KnowledgeProps) {
             </div>
           `
         : nothing}
+
+      <!-- Usage stats (Item 5) -->
+      ${renderUsageStats(props)}
+
+      <!-- Runtime reference graph (Item 4a) -->
+      ${renderKnowledgeGraph(props)}
 
       <!-- Last orchestration / discovery -->
       ${panel?.last_orchestration || panel?.last_discovery

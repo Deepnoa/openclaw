@@ -587,6 +587,17 @@ export class OpenClawApp extends LitElement {
     null;
   @state() knowledgeManifestDetailLoading = false;
   @state() knowledgeManifestDetailError: string | null = null;
+  @state() knowledgeGraph: import("./controllers/knowledge.js").KnowledgeGraphData | null = null;
+  @state() knowledgeGraphLoading = false;
+  @state() knowledgeGraphError: string | null = null;
+  @state() knowledgeGraphFilter: { nodeType: string | null; relation: string | null } = {
+    nodeType: null,
+    relation: null,
+  };
+  @state() knowledgeConsumptionStats: import("./controllers/knowledge.js").ConsumptionStats | null =
+    null;
+  @state() knowledgeConsumptionStatsLoading = false;
+  @state() knowledgeConsumptionStatsError: string | null = null;
 
   client: GatewayBrowserClient | null = null;
   private chatScrollFrame: number | null = null;

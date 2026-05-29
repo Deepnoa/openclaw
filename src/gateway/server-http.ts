@@ -89,6 +89,15 @@ let nasKnowledgePanelHttpModulePromise:
 let nasKnowledgeManifestHttpModulePromise:
   | Promise<typeof import("./nas-knowledge-manifest-http.js")>
   | undefined;
+let nasKnowledgeGraphHttpModulePromise:
+  | Promise<typeof import("./nas-knowledge-graph-http.js")>
+  | undefined;
+let nasKnowledgeConsumptionStatsHttpModulePromise:
+  | Promise<typeof import("./nas-knowledge-consumption-stats-http.js")>
+  | undefined;
+let nasKnowledgeRuntimeHttpModulePromise:
+  | Promise<typeof import("./nas-knowledge-runtime-http.js")>
+  | undefined;
 let internalStateHttpModulePromise: Promise<typeof import("./internal-state-http.js")> | undefined;
 let sessionKillHttpModulePromise: Promise<typeof import("./session-kill-http.js")> | undefined;
 let toolsInvokeHttpModulePromise: Promise<typeof import("./tools-invoke-http.js")> | undefined;
@@ -174,6 +183,22 @@ function getNasKnowledgePanelHttpModule() {
 function getNasKnowledgeManifestHttpModule() {
   nasKnowledgeManifestHttpModulePromise ??= import("./nas-knowledge-manifest-http.js");
   return nasKnowledgeManifestHttpModulePromise;
+}
+
+function getNasKnowledgeGraphHttpModule() {
+  nasKnowledgeGraphHttpModulePromise ??= import("./nas-knowledge-graph-http.js");
+  return nasKnowledgeGraphHttpModulePromise;
+}
+
+function getNasKnowledgeConsumptionStatsHttpModule() {
+  nasKnowledgeConsumptionStatsHttpModulePromise ??=
+    import("./nas-knowledge-consumption-stats-http.js");
+  return nasKnowledgeConsumptionStatsHttpModulePromise;
+}
+
+function getNasKnowledgeRuntimeHttpModule() {
+  nasKnowledgeRuntimeHttpModulePromise ??= import("./nas-knowledge-runtime-http.js");
+  return nasKnowledgeRuntimeHttpModulePromise;
 }
 
 function getInternalStateHttpModule() {
@@ -302,6 +327,18 @@ function isNasKnowledgePanelPath(pathname: string): boolean {
 
 function isNasKnowledgeManifestPath(pathname: string): boolean {
   return pathname.startsWith("/nas/knowledge-manifest/");
+}
+
+function isNasKnowledgeGraphPath(pathname: string): boolean {
+  return pathname === "/nas/knowledge-graph";
+}
+
+function isNasKnowledgeConsumptionStatsPath(pathname: string): boolean {
+  return pathname === "/nas/knowledge-consumption-stats";
+}
+
+function isNasKnowledgeRuntimePath(pathname: string): boolean {
+  return pathname === "/nas/knowledge-runtime-context";
 }
 
 function isManagedOutgoingImagePath(pathname: string): boolean {
@@ -803,6 +840,48 @@ export function createGatewayHttpServer(opts: {
           name: "nas-knowledge-manifest",
           run: async () =>
             (await getNasKnowledgeManifestHttpModule()).handleNasKnowledgeManifestHttpRequest(
+              req,
+              res,
+              {
+                auth: resolvedAuth,
+                trustedProxies,
+                allowRealIpFallback,
+                rateLimiter,
+              },
+            ),
+        });
+      }
+      if (isNasKnowledgeGraphPath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-knowledge-graph",
+          run: async () =>
+            (await getNasKnowledgeGraphHttpModule()).handleNasKnowledgeGraphHttpRequest(req, res, {
+              auth: resolvedAuth,
+              trustedProxies,
+              allowRealIpFallback,
+              rateLimiter,
+            }),
+        });
+      }
+      if (isNasKnowledgeConsumptionStatsPath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-knowledge-consumption-stats",
+          run: async () =>
+            (
+              await getNasKnowledgeConsumptionStatsHttpModule()
+            ).handleNasKnowledgeConsumptionStatsHttpRequest(req, res, {
+              auth: resolvedAuth,
+              trustedProxies,
+              allowRealIpFallback,
+              rateLimiter,
+            }),
+        });
+      }
+      if (isNasKnowledgeRuntimePath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-knowledge-runtime-context",
+          run: async () =>
+            (await getNasKnowledgeRuntimeHttpModule()).handleNasKnowledgeRuntimeHttpRequest(
               req,
               res,
               {

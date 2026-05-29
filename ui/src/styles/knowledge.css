@@ -538,3 +538,116 @@
   border-top: 1px dashed var(--border);
   word-break: break-word;
 }
+
+/* ---- Runtime reference graph table (Item 4a) ---- */
+
+.kn-graph-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.kn-graph-filter {
+  background: var(--input-bg, var(--panel));
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 12px;
+  padding: 3px 8px;
+}
+
+.kn-graph-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.kn-graph-table th {
+  text-align: left;
+  color: var(--muted);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kn-graph-table td {
+  padding: 5px 8px;
+  border-bottom: 1px solid color-mix(in oklab, var(--border) 50%, transparent);
+  vertical-align: top;
+}
+
+.kn-graph-node-type {
+  display: inline-block;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 1px 4px;
+  border-radius: var(--radius);
+  margin-right: 4px;
+  color: var(--muted);
+  background: color-mix(in oklab, var(--panel) 50%, var(--border));
+}
+
+.kn-graph-node-type--manifest {
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
+
+.kn-graph-node-type--runtime_domain {
+  color: var(--warn, orange);
+  background: color-mix(in oklab, var(--warn, orange) 12%, transparent);
+}
+
+/* ---- Usage stats (Item 5) ---- */
+
+.kn-usage-metrics {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.kn-usage-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kn-usage-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.kn-usage-value--warn {
+  color: var(--danger, #e5534b);
+}
+
+.kn-usage-block {
+  margin-top: 8px;
+}
+
+.kn-usage-block__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.kn-usage-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.kn-usage-unused {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}

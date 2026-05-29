@@ -99,6 +99,8 @@ import {
   loadKnowledgePanel,
   loadManifestDetail,
   closeManifestDetail,
+  loadKnowledgeGraph,
+  loadConsumptionStats,
   runKnowledgeAction,
   executeConfirmedIngest,
 } from "./controllers/knowledge.ts";
@@ -2625,6 +2627,13 @@ export function renderApp(state: AppViewState) {
                 knowledgeManifestDetail: state.knowledgeManifestDetail,
                 knowledgeManifestDetailLoading: state.knowledgeManifestDetailLoading,
                 knowledgeManifestDetailError: state.knowledgeManifestDetailError,
+                knowledgeGraph: state.knowledgeGraph,
+                knowledgeGraphLoading: state.knowledgeGraphLoading,
+                knowledgeGraphError: state.knowledgeGraphError,
+                knowledgeGraphFilter: state.knowledgeGraphFilter,
+                knowledgeConsumptionStats: state.knowledgeConsumptionStats,
+                knowledgeConsumptionStatsLoading: state.knowledgeConsumptionStatsLoading,
+                knowledgeConsumptionStatsError: state.knowledgeConsumptionStatsError,
                 requestUpdate: requestHostUpdate,
                 onQueryChange: (q) => (state.knowledgeQuery = q),
                 onAction: (action, query) => void runKnowledgeAction(state, action, { query }),
@@ -2634,9 +2643,16 @@ export function renderApp(state: AppViewState) {
                   state.knowledgeConfirmPending = null;
                   state.knowledgeConfirmResult = null;
                 },
-                onRefresh: () => void loadKnowledgePanel(state),
+                onRefresh: () => {
+                  void loadKnowledgePanel(state);
+                  void loadKnowledgeGraph(state);
+                  void loadConsumptionStats(state);
+                },
                 onManifestSelect: (id) => void loadManifestDetail(state, id),
                 onManifestDetailClose: () => closeManifestDetail(state),
+                onGraphFilterChange: (filter) => {
+                  state.knowledgeGraphFilter = filter;
+                },
               }),
             )
           : nothing}

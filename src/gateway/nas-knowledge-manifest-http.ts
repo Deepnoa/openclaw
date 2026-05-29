@@ -8,6 +8,7 @@ import {
   authorizeScopedGatewayHttpRequestOrReply,
   resolveOpenAiCompatibleHttpOperatorScopes,
 } from "./http-utils.js";
+import { readManifestUsage } from "./nas-knowledge-consumption.js";
 
 const REGISTRY_ROOT = process.env.DEEPNOA_REGISTRY ?? "/home/deepnoa/deepnoa-registry";
 
@@ -180,12 +181,21 @@ export async function handleNasKnowledgeManifestHttpRequest(
     return true;
   }
 
-  const retrievalHistory = await readRetrievalHistory();
+  const [retrievalHistory, usage] = await Promise.all([
+    readRetrievalHistory(),
+    readManifestUsage(rawId),
+  ]);
 
   sendJson(res, 200, {
     ok: true,
     entry: pickSafeFields(rawEntry),
     retrieval_history: retrievalHistory,
+    // Per-manifest usage metrics from the append-only consumption log (Phase B Item 5).
+    usage: {
+      retrieval_count: usage.retrieval_count,
+      first_retrieved: usage.first_retrieved,
+      last_retrieved: usage.last_retrieved,
+    },
     // Runtime references are stubbed in Phase A; populated once runtime integration
     // (Phase B Item 6) wires manifest ids into loop-state references.
     runtime_references: [],

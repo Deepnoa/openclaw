@@ -120,10 +120,58 @@ export type RuntimeReference = {
   timestamp: string;
 };
 
+export type ManifestUsage = {
+  retrieval_count: number;
+  first_retrieved: string | null;
+  last_retrieved: string | null;
+};
+
 export type ManifestDetailData = {
   entry: ManifestDetailEntry;
   retrieval_history: RetrievalHistoryEntry[];
   runtime_references: RuntimeReference[];
+  usage?: ManifestUsage;
+};
+
+// ── Runtime reference graph (Item 4a) ─────────────────────────────────────────
+
+export type KnowledgeGraphNode = {
+  id: string;
+  type: "manifest" | "runtime_domain" | "orchestration";
+  label: string;
+  properties: Record<string, string | number | boolean>;
+};
+
+export type KnowledgeGraphEdge = {
+  source: string;
+  target: string;
+  relation: "retrieved" | "discovered" | "proposed" | "referenced" | "ingested";
+  timestamp?: string;
+  weight: number;
+};
+
+export type KnowledgeGraphData = {
+  nodes: KnowledgeGraphNode[];
+  edges: KnowledgeGraphEdge[];
+  generated_at: string;
+  node_count: number;
+  edge_count: number;
+};
+
+// ── Consumption stats (Item 5) ────────────────────────────────────────────────
+
+export type ConsumptionStats = {
+  total_retrievals: number;
+  total_discoveries: number;
+  total_proposals: number;
+  total_ingestions: number;
+  blocked_attempts: number;
+  not_found_attempts: number;
+  stale_references: number;
+  top_manifests: Array<{ id: string; title: string; count: number }>;
+  unused_manifests: string[];
+  window_days: number;
+  event_count: number;
 };
 
 export type KnowledgeState = {
@@ -145,6 +193,13 @@ export type KnowledgeState = {
   knowledgeManifestDetail: ManifestDetailData | null;
   knowledgeManifestDetailLoading: boolean;
   knowledgeManifestDetailError: string | null;
+  knowledgeGraph: KnowledgeGraphData | null;
+  knowledgeGraphLoading: boolean;
+  knowledgeGraphError: string | null;
+  knowledgeGraphFilter: { nodeType: string | null; relation: string | null };
+  knowledgeConsumptionStats: ConsumptionStats | null;
+  knowledgeConsumptionStatsLoading: boolean;
+  knowledgeConsumptionStatsError: string | null;
 };
 
 // ── Fetch helpers ──────────────────────────────────────────────────────────
@@ -278,12 +333,14 @@ export async function loadManifestDetail(state: KnowledgeState, id: string): Pro
       entry?: ManifestDetailEntry;
       retrieval_history?: RetrievalHistoryEntry[];
       runtime_references?: RuntimeReference[];
+      usage?: ManifestUsage;
     };
     if (data.ok && data.entry) {
       state.knowledgeManifestDetail = {
         entry: data.entry,
         retrieval_history: Array.isArray(data.retrieval_history) ? data.retrieval_history : [],
         runtime_references: Array.isArray(data.runtime_references) ? data.runtime_references : [],
+        usage: data.usage,
       };
     } else {
       state.knowledgeManifestDetailError = "Unexpected response from /nas/knowledge-manifest";
@@ -300,6 +357,63 @@ export function closeManifestDetail(state: KnowledgeState): void {
   state.knowledgeManifestDetail = null;
   state.knowledgeManifestDetailError = null;
   state.knowledgeManifestDetailLoading = false;
+}
+
+export async function loadKnowledgeGraph(state: KnowledgeState): Promise<void> {
+  state.knowledgeGraphLoading = true;
+  state.knowledgeGraphError = null;
+  try {
+    const res = await gatewayFetch(state, "/nas/knowledge-graph");
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as {
+        error?: string | Record<string, unknown>;
+      } | null;
+      state.knowledgeGraphError = extractErrorMessage(body?.error, `HTTP ${res.status}`);
+      return;
+    }
+    const data = (await res.json()) as { ok: boolean } & KnowledgeGraphData;
+    if (data.ok) {
+      state.knowledgeGraph = {
+        nodes: Array.isArray(data.nodes) ? data.nodes : [],
+        edges: Array.isArray(data.edges) ? data.edges : [],
+        generated_at: data.generated_at ?? "",
+        node_count: data.node_count ?? 0,
+        edge_count: data.edge_count ?? 0,
+      };
+    } else {
+      state.knowledgeGraphError = "Unexpected response from /nas/knowledge-graph";
+    }
+  } catch (err) {
+    state.knowledgeGraphError = err instanceof Error ? err.message : String(err);
+  } finally {
+    state.knowledgeGraphLoading = false;
+  }
+}
+
+export async function loadConsumptionStats(state: KnowledgeState): Promise<void> {
+  state.knowledgeConsumptionStatsLoading = true;
+  state.knowledgeConsumptionStatsError = null;
+  try {
+    const res = await gatewayFetch(state, "/nas/knowledge-consumption-stats");
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as {
+        error?: string | Record<string, unknown>;
+      } | null;
+      state.knowledgeConsumptionStatsError = extractErrorMessage(body?.error, `HTTP ${res.status}`);
+      return;
+    }
+    const data = (await res.json()) as { ok: boolean; stats?: ConsumptionStats };
+    if (data.ok && data.stats) {
+      state.knowledgeConsumptionStats = data.stats;
+    } else {
+      state.knowledgeConsumptionStatsError =
+        "Unexpected response from /nas/knowledge-consumption-stats";
+    }
+  } catch (err) {
+    state.knowledgeConsumptionStatsError = err instanceof Error ? err.message : String(err);
+  } finally {
+    state.knowledgeConsumptionStatsLoading = false;
+  }
 }
 
 export async function runKnowledgeAction(

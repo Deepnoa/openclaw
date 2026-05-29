@@ -42,7 +42,12 @@ import {
   type DreamingState,
 } from "./controllers/dreaming.ts";
 import { loadExecApprovals, type ExecApprovalsState } from "./controllers/exec-approvals.ts";
-import { loadKnowledgePanel, type KnowledgeState } from "./controllers/knowledge.ts";
+import {
+  loadKnowledgePanel,
+  loadKnowledgeGraph,
+  loadConsumptionStats,
+  type KnowledgeState,
+} from "./controllers/knowledge.ts";
 import { loadLogs, type LogsState } from "./controllers/logs.ts";
 import {
   loadModelAuthStatusState,
@@ -416,7 +421,11 @@ export async function refreshActiveTab(host: SettingsHost) {
         scheduleLogsScroll(host as unknown as Parameters<typeof scheduleLogsScroll>[0], true);
         break;
       case "knowledge":
-        await loadKnowledgePanel(app);
+        await Promise.all([
+          loadKnowledgePanel(app),
+          loadKnowledgeGraph(app),
+          loadConsumptionStats(app),
+        ]);
         break;
     }
     finishControlUiRefresh(host, refreshRun, "ok");
