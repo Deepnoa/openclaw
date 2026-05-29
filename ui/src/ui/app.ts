@@ -582,6 +582,11 @@ export class OpenClawApp extends LitElement {
   } | null = null;
   @state() knowledgeConfirmExecuting = false;
   @state() knowledgeConfirmResult: string | null = null;
+  @state() knowledgeManifestDetailId: string | null = null;
+  @state() knowledgeManifestDetail: import("./controllers/knowledge.js").ManifestDetailData | null =
+    null;
+  @state() knowledgeManifestDetailLoading = false;
+  @state() knowledgeManifestDetailError: string | null = null;
 
   client: GatewayBrowserClient | null = null;
   private chatScrollFrame: number | null = null;

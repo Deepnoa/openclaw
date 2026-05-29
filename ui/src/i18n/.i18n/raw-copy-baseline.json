@@ -3646,13 +3646,6 @@
       "kind": "html-text",
       "name": "text",
       "path": "ui/src/ui/views/knowledge.ts",
-      "text": "Blocked"
-    },
-    {
-      "count": 1,
-      "kind": "html-text",
-      "name": "text",
-      "path": "ui/src/ui/views/knowledge.ts",
       "text": "Discovery:"
     },
     {
@@ -3688,13 +3681,6 @@
       "kind": "html-text",
       "name": "text",
       "path": "ui/src/ui/views/knowledge.ts",
-      "text": "No results returned."
-    },
-    {
-      "count": 1,
-      "kind": "html-text",
-      "name": "text",
-      "path": "ui/src/ui/views/knowledge.ts",
       "text": "Orchestration:"
     },
     {
@@ -3703,13 +3689,6 @@
       "name": "text",
       "path": "ui/src/ui/views/knowledge.ts",
       "text": "Recent Activity"
-    },
-    {
-      "count": 1,
-      "kind": "html-text",
-      "name": "text",
-      "path": "ui/src/ui/views/knowledge.ts",
-      "text": "Retrieved"
     },
     {
       "count": 1,

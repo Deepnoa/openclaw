@@ -86,6 +86,9 @@ let nasKnowledgeAssistHttpModulePromise:
 let nasKnowledgePanelHttpModulePromise:
   | Promise<typeof import("./nas-knowledge-panel-http.js")>
   | undefined;
+let nasKnowledgeManifestHttpModulePromise:
+  | Promise<typeof import("./nas-knowledge-manifest-http.js")>
+  | undefined;
 let internalStateHttpModulePromise: Promise<typeof import("./internal-state-http.js")> | undefined;
 let sessionKillHttpModulePromise: Promise<typeof import("./session-kill-http.js")> | undefined;
 let toolsInvokeHttpModulePromise: Promise<typeof import("./tools-invoke-http.js")> | undefined;
@@ -166,6 +169,11 @@ function getNasKnowledgeAssistHttpModule() {
 function getNasKnowledgePanelHttpModule() {
   nasKnowledgePanelHttpModulePromise ??= import("./nas-knowledge-panel-http.js");
   return nasKnowledgePanelHttpModulePromise;
+}
+
+function getNasKnowledgeManifestHttpModule() {
+  nasKnowledgeManifestHttpModulePromise ??= import("./nas-knowledge-manifest-http.js");
+  return nasKnowledgeManifestHttpModulePromise;
 }
 
 function getInternalStateHttpModule() {
@@ -290,6 +298,10 @@ function isNasKnowledgeAssistPath(pathname: string): boolean {
 
 function isNasKnowledgePanelPath(pathname: string): boolean {
   return pathname === "/nas/knowledge-panel";
+}
+
+function isNasKnowledgeManifestPath(pathname: string): boolean {
+  return pathname.startsWith("/nas/knowledge-manifest/");
 }
 
 function isManagedOutgoingImagePath(pathname: string): boolean {
@@ -784,6 +796,22 @@ export function createGatewayHttpServer(opts: {
               allowRealIpFallback,
               rateLimiter,
             }),
+        });
+      }
+      if (isNasKnowledgeManifestPath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-knowledge-manifest",
+          run: async () =>
+            (await getNasKnowledgeManifestHttpModule()).handleNasKnowledgeManifestHttpRequest(
+              req,
+              res,
+              {
+                auth: resolvedAuth,
+                trustedProxies,
+                allowRealIpFallback,
+                rateLimiter,
+              },
+            ),
         });
       }
       if (isSessionKillPath(scopedRequestPath)) {

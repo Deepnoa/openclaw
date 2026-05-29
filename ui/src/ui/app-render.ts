@@ -97,6 +97,8 @@ import {
 } from "./controllers/exec-approvals.ts";
 import {
   loadKnowledgePanel,
+  loadManifestDetail,
+  closeManifestDetail,
   runKnowledgeAction,
   executeConfirmedIngest,
 } from "./controllers/knowledge.ts";
@@ -2619,6 +2621,10 @@ export function renderApp(state: AppViewState) {
                 knowledgeConfirmPending: state.knowledgeConfirmPending,
                 knowledgeConfirmExecuting: state.knowledgeConfirmExecuting,
                 knowledgeConfirmResult: state.knowledgeConfirmResult,
+                knowledgeManifestDetailId: state.knowledgeManifestDetailId,
+                knowledgeManifestDetail: state.knowledgeManifestDetail,
+                knowledgeManifestDetailLoading: state.knowledgeManifestDetailLoading,
+                knowledgeManifestDetailError: state.knowledgeManifestDetailError,
                 requestUpdate: requestHostUpdate,
                 onQueryChange: (q) => (state.knowledgeQuery = q),
                 onAction: (action, query) => void runKnowledgeAction(state, action, { query }),
@@ -2629,6 +2635,8 @@ export function renderApp(state: AppViewState) {
                   state.knowledgeConfirmResult = null;
                 },
                 onRefresh: () => void loadKnowledgePanel(state),
+                onManifestSelect: (id) => void loadManifestDetail(state, id),
+                onManifestDetailClose: () => closeManifestDetail(state),
               }),
             )
           : nothing}

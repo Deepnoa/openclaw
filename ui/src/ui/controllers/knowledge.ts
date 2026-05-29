@@ -60,6 +60,7 @@ export type RetrievalEntry = {
   title: string;
   sensitivity?: string;
   lifecycle_state?: string;
+  artifact_type?: string;
   // API returns either a plain string or a bounded summary object (never raw content)
   summary?: string | Record<string, unknown>;
   blocked_reason?: string;
@@ -90,6 +91,41 @@ export type KnowledgeActionResult = {
   raw?: Record<string, unknown>;
 };
 
+// ── Manifest detail (Item 1) ─────────────────────────────────────────────────
+
+export type ManifestDetailEntry = {
+  id: string;
+  title?: string;
+  artifact_type?: string;
+  lifecycle_state?: string;
+  decision?: string;
+  decision_reason?: string;
+  sensitivity?: string;
+  retrieval_allowed?: boolean;
+  export_allowed?: boolean;
+  rag_safe?: boolean;
+  created_at?: string;
+};
+
+export type RetrievalHistoryEntry = {
+  timestamp: string;
+  query: string | null;
+  classification: string | null;
+  routed_to: string[];
+};
+
+export type RuntimeReference = {
+  domain: string;
+  reference_type: string;
+  timestamp: string;
+};
+
+export type ManifestDetailData = {
+  entry: ManifestDetailEntry;
+  retrieval_history: RetrievalHistoryEntry[];
+  runtime_references: RuntimeReference[];
+};
+
 export type KnowledgeState = {
   settings: UiSettings;
   hello?: { auth?: { deviceToken?: string | null } | null } | null;
@@ -105,6 +141,10 @@ export type KnowledgeState = {
   knowledgeConfirmPending: { path: string; dryRunResult: IngestDryRunData } | null;
   knowledgeConfirmExecuting: boolean;
   knowledgeConfirmResult: string | null;
+  knowledgeManifestDetailId: string | null;
+  knowledgeManifestDetail: ManifestDetailData | null;
+  knowledgeManifestDetailLoading: boolean;
+  knowledgeManifestDetailError: string | null;
 };
 
 // ── Fetch helpers ──────────────────────────────────────────────────────────
@@ -169,15 +209,7 @@ function gatewayFetch(state: KnowledgeState, path: string, opts?: RequestInit): 
     .replace(/\/$/, "")
     .replace(/^wss:\/\//, "https://")
     .replace(/^ws:\/\//, "http://");
-  const { header: authHeader, source: authSource } = resolveKnowledgeHttpAuthHeader(state);
-  console.debug("[kp:fetch]", {
-    path,
-    hasSettingsToken: Boolean(state.settings?.token?.trim()),
-    hasHelloDeviceToken: Boolean(state.hello?.auth?.deviceToken),
-    hasPassword: Boolean(state.password?.trim()),
-    authHeaderPresent: Boolean(authHeader),
-    authSource,
-  });
+  const { header: authHeader } = resolveKnowledgeHttpAuthHeader(state);
   return fetch(`${httpBase}${path}`, {
     ...opts,
     headers: {
@@ -203,41 +235,71 @@ function extractErrorMessage(
 // ── Controllers ────────────────────────────────────────────────────────────
 
 export async function loadKnowledgePanel(state: KnowledgeState): Promise<void> {
-  const callId = Math.random().toString(36).slice(2, 6);
-  console.debug(`[kp:${callId}] start`, {
-    hasToken: Boolean(state.settings?.token?.trim()),
-    hasDeviceToken: Boolean(state.hello?.auth?.deviceToken),
-    prevError: state.knowledgePanelError,
-    prevPanel: Boolean(state.knowledgePanel),
-    connected: state.connected,
-  });
   state.knowledgePanelLoading = true;
   state.knowledgePanelError = null;
   try {
     const res = await gatewayFetch(state, "/nas/knowledge-panel");
-    console.debug(`[kp:${callId}] fetch status=${res.status} ok=${res.ok}`);
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as {
         error?: string | Record<string, unknown>;
       } | null;
       state.knowledgePanelError = extractErrorMessage(body?.error, `HTTP ${res.status}`);
-      console.debug(`[kp:${callId}] set error: ${state.knowledgePanelError}`);
       return;
     }
     const data = (await res.json()) as { ok: boolean; panel: KnowledgePanelData };
     if (data.ok && data.panel) {
       state.knowledgePanel = data.panel;
-      console.debug(`[kp:${callId}] panel OK manifest_count=${data.panel.safe_manifest_count}`);
     } else {
       state.knowledgePanelError = "Unexpected response from /nas/knowledge-panel";
-      console.debug(`[kp:${callId}] unexpected response`, data);
     }
   } catch (err) {
     state.knowledgePanelError = err instanceof Error ? err.message : String(err);
-    console.debug(`[kp:${callId}] exception: ${state.knowledgePanelError}`);
   } finally {
     state.knowledgePanelLoading = false;
   }
+}
+
+export async function loadManifestDetail(state: KnowledgeState, id: string): Promise<void> {
+  state.knowledgeManifestDetailId = id;
+  state.knowledgeManifestDetail = null;
+  state.knowledgeManifestDetailError = null;
+  state.knowledgeManifestDetailLoading = true;
+  try {
+    const res = await gatewayFetch(state, `/nas/knowledge-manifest/${encodeURIComponent(id)}`);
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as {
+        error?: string | Record<string, unknown>;
+      } | null;
+      state.knowledgeManifestDetailError = extractErrorMessage(body?.error, `HTTP ${res.status}`);
+      return;
+    }
+    const data = (await res.json()) as {
+      ok: boolean;
+      entry?: ManifestDetailEntry;
+      retrieval_history?: RetrievalHistoryEntry[];
+      runtime_references?: RuntimeReference[];
+    };
+    if (data.ok && data.entry) {
+      state.knowledgeManifestDetail = {
+        entry: data.entry,
+        retrieval_history: Array.isArray(data.retrieval_history) ? data.retrieval_history : [],
+        runtime_references: Array.isArray(data.runtime_references) ? data.runtime_references : [],
+      };
+    } else {
+      state.knowledgeManifestDetailError = "Unexpected response from /nas/knowledge-manifest";
+    }
+  } catch (err) {
+    state.knowledgeManifestDetailError = err instanceof Error ? err.message : String(err);
+  } finally {
+    state.knowledgeManifestDetailLoading = false;
+  }
+}
+
+export function closeManifestDetail(state: KnowledgeState): void {
+  state.knowledgeManifestDetailId = null;
+  state.knowledgeManifestDetail = null;
+  state.knowledgeManifestDetailError = null;
+  state.knowledgeManifestDetailLoading = false;
 }
 
 export async function runKnowledgeAction(

@@ -5,13 +5,9 @@ import type {
   IngestDryRunData,
   KnowledgeActionResult,
   KnowledgePanelData,
+  ManifestDetailData,
   ManifestEntry,
   RetrievalEntry,
-} from "../controllers/knowledge.ts";
-import {
-  executeConfirmedIngest,
-  loadKnowledgePanel,
-  runKnowledgeAction,
 } from "../controllers/knowledge.ts";
 import type { UiSettings } from "../storage.ts";
 
@@ -28,6 +24,10 @@ export type KnowledgeProps = {
   knowledgeConfirmPending: { path: string; dryRunResult: IngestDryRunData } | null;
   knowledgeConfirmExecuting: boolean;
   knowledgeConfirmResult: string | null;
+  knowledgeManifestDetailId: string | null;
+  knowledgeManifestDetail: ManifestDetailData | null;
+  knowledgeManifestDetailLoading: boolean;
+  knowledgeManifestDetailError: string | null;
   requestUpdate: () => void;
   onQueryChange: (q: string) => void;
   onAction: (
@@ -38,6 +38,8 @@ export type KnowledgeProps = {
   onConfirmExecute: (path: string) => void;
   onCancelConfirm: () => void;
   onRefresh: () => void;
+  onManifestSelect: (id: string) => void;
+  onManifestDetailClose: () => void;
 };
 
 // ── Pressure badge ─────────────────────────────────────────────────────────
@@ -56,11 +58,42 @@ function decisionClass(decision: string): string {
   return "kn-badge--dry-run";
 }
 
+function lifecycleClass(lifecycle: string | undefined): string {
+  if (lifecycle === "active") return "kn-badge--allowed";
+  if (lifecycle === "archived") return "kn-badge--dry-run";
+  return "kn-badge--review";
+}
+
+function renderBoolBadge(label: string, value: boolean | undefined) {
+  if (value === undefined) return nothing;
+  return html`<span class="kn-badge ${value ? "kn-badge--allowed" : "kn-badge--blocked"}"
+    >${label}: ${value ? "yes" : "no"}</span
+  >`;
+}
+
 // ── Sub-renders ────────────────────────────────────────────────────────────
 
-function renderManifestEntry(entry: ManifestEntry) {
+function renderManifestEntry(
+  entry: ManifestEntry,
+  onSelect: (id: string) => void,
+  selectedId: string | null,
+) {
+  const isSelected = selectedId === entry.id;
   return html`
-    <div class="kn-manifest-card">
+    <div
+      class="kn-manifest-card kn-manifest-card--clickable ${isSelected
+        ? "kn-manifest-card--selected"
+        : ""}"
+      role="button"
+      tabindex="0"
+      @click=${() => onSelect(entry.id)}
+      @keydown=${(e: KeyboardEvent) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onSelect(entry.id);
+        }
+      }}
+    >
       <div class="kn-manifest-card__header">
         <span class="kn-manifest-card__title">${entry.title || entry.id}</span>
         <span class="kn-badge ${decisionClass(entry.decision)}">${entry.decision}</span>
@@ -128,28 +161,77 @@ function renderSummary(summary: string | Record<string, unknown>) {
   </div>`;
 }
 
-function renderRetrievalEntry(entry: RetrievalEntry) {
+// Related manifests: same sensitivity OR same artifact_type, excluding self, max 3.
+// Clickable — opens the manifest detail panel (Item 1).
+function findRelatedManifests(
+  entry: RetrievalEntry,
+  manifestEntries: ManifestEntry[] | undefined,
+): ManifestEntry[] {
+  if (!manifestEntries?.length) return [];
+  return manifestEntries
+    .filter(
+      (m) =>
+        m.id !== entry.id &&
+        ((entry.sensitivity && m.sensitivity === entry.sensitivity) ||
+          (entry.artifact_type && m.artifact_type === entry.artifact_type)),
+    )
+    .slice(0, 3);
+}
+
+function renderRetrievalEntry(
+  entry: RetrievalEntry,
+  manifestEntries: ManifestEntry[] | undefined,
+  onManifestSelect: (id: string) => void,
+) {
   const isBlocked = Boolean(entry.blocked_reason);
+  const whyMatched = entry.explainability?.why_retrieval_decision;
+  const related = isBlocked ? [] : findRelatedManifests(entry, manifestEntries);
   return html`
     <div class="kn-manifest-card ${isBlocked ? "kn-manifest-card--blocked" : ""}">
       <div class="kn-manifest-card__header">
         <span class="kn-manifest-card__title">${entry.title || entry.id}</span>
         ${isBlocked
-          ? html`<span class="kn-badge kn-badge--blocked">Blocked</span>`
-          : html`<span class="kn-badge kn-badge--allowed">Retrieved</span>`}
+          ? html`<span class="kn-badge kn-badge--blocked">${t("knowledge.blocked")}</span>`
+          : html`<span class="kn-badge kn-badge--allowed">${t("knowledge.retrieved")}</span>`}
+        ${entry.lifecycle_state
+          ? html`<span class="kn-badge ${lifecycleClass(entry.lifecycle_state)}"
+              >${entry.lifecycle_state}</span
+            >`
+          : nothing}
         ${entry.sensitivity
           ? html`<span class="kn-badge kn-badge--dry-run">${entry.sensitivity}</span>`
           : nothing}
       </div>
       ${isBlocked
-        ? html`<div class="kn-muted">${entry.blocked_reason}</div>`
+        ? html`<div class="kn-muted kn-explain">
+            <span class="kn-detail-key">${t("knowledge.blockedReason")}</span>
+            ${entry.blocked_reason}
+          </div>`
         : html`
             ${entry.summary ? renderSummary(entry.summary) : nothing}
-            ${entry.explainability?.why_retrieval_decision
-              ? html`<div class="kn-muted kn-explain">
-                  ${entry.explainability.why_retrieval_decision}
+            ${whyMatched
+              ? html`<div class="kn-why">
+                  <span class="kn-why-badge">${t("knowledge.whyMatched")}</span>
+                  <span class="kn-muted">${whyMatched}</span>
                 </div>`
               : nothing}
+            ${related.length
+              ? html`<div class="kn-related">
+                  <span class="kn-detail-key">${t("knowledge.related")}</span>
+                  ${related.map(
+                    (m) => html`<button
+                      class="kn-related-link"
+                      @click=${() => onManifestSelect(m.id)}
+                    >
+                      ${m.title || m.id}
+                    </button>`,
+                  )}
+                </div>`
+              : nothing}
+            <div class="kn-citation-line">
+              <span class="kn-detail-key">${t("knowledge.citation")}</span>
+              ${entry.id}${entry.artifact_type ? html` · ${entry.artifact_type}` : nothing}
+            </div>
           `}
     </div>
   `;
@@ -209,11 +291,21 @@ function renderActionResults(
   onCancel: () => void,
   confirmExecuting: boolean,
   confirmResult: string | null,
+  manifestEntries: ManifestEntry[] | undefined,
+  onManifestSelect: (id: string) => void,
 ) {
+  const entries = result.entries ?? [];
+  const retrievedCount = entries.filter((e) => !e.blocked_reason).length;
+  const blockedCount = entries.filter((e) => Boolean(e.blocked_reason)).length;
+  const retrievedIds = entries
+    .filter((e) => !e.blocked_reason)
+    .map((e) => e.id)
+    .filter(Boolean);
   return html`
     <div class="kn-results">
       <div class="kn-results__header">
         <span class="kn-badge kn-badge--dry-run">${result.action}</span>
+        <span class="kn-results__label">${t("knowledge.classification")}</span>
         <span
           class="kn-badge ${result.classification === "CANDIDATES_FOUND" ||
           result.classification === "RETRIEVED"
@@ -221,6 +313,18 @@ function renderActionResults(
             : "kn-badge--review"}"
           >${result.classification}</span
         >
+        ${entries.length
+          ? html`
+              <span class="kn-badge kn-badge--allowed"
+                >${retrievedCount} ${t("knowledge.retrieved")}</span
+              >
+              ${blockedCount
+                ? html`<span class="kn-badge kn-badge--blocked"
+                    >${blockedCount} ${t("knowledge.blocked")}</span
+                  >`
+                : nothing}
+            `
+          : nothing}
         ${result.runtime_pressure_note
           ? html`<span class="kn-muted">${result.runtime_pressure_note}</span>`
           : nothing}
@@ -231,10 +335,16 @@ function renderActionResults(
             ${result.candidates.map((c) => renderCandidateCard(c, onDryRun))}
           </div>`
         : nothing}
-      ${result.entries?.length
+      ${entries.length
         ? html`<div class="kn-result-section">
-            <div class="kn-section-label">Retrieval Results (${result.entries.length})</div>
-            ${result.entries.map(renderRetrievalEntry)}
+            <div class="kn-section-label">Retrieval Results (${entries.length})</div>
+            ${entries.map((e) => renderRetrievalEntry(e, manifestEntries, onManifestSelect))}
+            ${retrievedIds.length
+              ? html`<div class="kn-provenance kn-muted">
+                  <span class="kn-detail-key">${t("knowledge.provenance")}</span>
+                  knowledge-assist → manifest-registry → ${retrievedIds.join(", ")}
+                </div>`
+              : nothing}
           </div>`
         : nothing}
       ${result.dry_run
@@ -249,10 +359,156 @@ function renderActionResults(
             )}
           </div>`
         : nothing}
-      ${!result.candidates?.length && !result.entries?.length && !result.dry_run
-        ? html`<div class="kn-muted">No results returned.</div>`
+      ${!result.candidates?.length && !entries.length && !result.dry_run
+        ? html`<div class="kn-muted">${t("knowledge.noRetrievalResults")}</div>`
         : nothing}
     </div>
+  `;
+}
+
+// ── Manifest detail panel (Item 1) ───────────────────────────────────────────
+
+function renderManifestDetail(props: KnowledgeProps) {
+  const {
+    knowledgeManifestDetailId,
+    knowledgeManifestDetail,
+    knowledgeManifestDetailLoading,
+    knowledgeManifestDetailError,
+    onManifestDetailClose,
+  } = props;
+
+  if (!knowledgeManifestDetailId) {
+    return nothing;
+  }
+
+  const detail = knowledgeManifestDetail;
+  const entry = detail?.entry;
+
+  return html`
+    <div class="kn-detail-overlay" @click=${onManifestDetailClose}></div>
+    <aside class="kn-detail-panel" role="dialog" aria-label="${t("knowledge.detailTitle")}">
+      <div class="kn-detail-panel__header">
+        <span class="kn-detail-panel__title"> ${entry?.title || knowledgeManifestDetailId} </span>
+        ${entry?.lifecycle_state
+          ? html`<span class="kn-badge ${lifecycleClass(entry.lifecycle_state)}"
+              >${entry.lifecycle_state}</span
+            >`
+          : nothing}
+        <button
+          class="kn-detail-close"
+          aria-label="${t("knowledge.detailClose")}"
+          @click=${onManifestDetailClose}
+        >
+          ✕
+        </button>
+      </div>
+
+      ${knowledgeManifestDetailLoading
+        ? html`<div class="kn-muted kn-loading">${t("knowledge.detailLoading")}</div>`
+        : knowledgeManifestDetailError
+          ? html`<div class="kn-error">${knowledgeManifestDetailError}</div>`
+          : entry
+            ? html`
+                <!-- Section 1: Governance -->
+                <div class="kn-detail-section">
+                  <div class="kn-detail-section__label">${t("knowledge.detailGovernance")}</div>
+                  <div class="kn-detail-row">
+                    <span class="kn-detail-key">${t("knowledge.decision")}</span>
+                    <span class="kn-badge ${decisionClass(entry.decision ?? "")}"
+                      >${entry.decision ?? "—"}</span
+                    >
+                  </div>
+                  ${entry.decision_reason
+                    ? html`<div class="kn-detail-row">
+                        <span class="kn-detail-key">${t("knowledge.decisionReason")}</span>
+                        <span class="kn-muted">${entry.decision_reason}</span>
+                      </div>`
+                    : nothing}
+                  ${entry.sensitivity
+                    ? html`<div class="kn-detail-row">
+                        <span class="kn-detail-key">${t("knowledge.sensitivity")}</span>
+                        <span class="kn-badge kn-badge--dry-run">${entry.sensitivity}</span>
+                      </div>`
+                    : nothing}
+                </div>
+
+                <!-- Section 2: Capabilities -->
+                <div class="kn-detail-section">
+                  <div class="kn-detail-section__label">${t("knowledge.detailCapabilities")}</div>
+                  <div class="kn-detail-badges">
+                    ${renderBoolBadge(t("knowledge.retrievalAllowed"), entry.retrieval_allowed)}
+                    ${renderBoolBadge(t("knowledge.exportAllowed"), entry.export_allowed)}
+                    ${renderBoolBadge(t("knowledge.ragSafe"), entry.rag_safe)}
+                  </div>
+                </div>
+
+                <!-- Section 3: Retrieval History -->
+                <div class="kn-detail-section">
+                  <div class="kn-detail-section__label">
+                    ${t("knowledge.detailRetrievalHistory")}
+                  </div>
+                  ${detail?.retrieval_history?.length
+                    ? html`<div class="kn-detail-history">
+                        ${detail.retrieval_history.map(
+                          (h) => html`
+                            <div class="kn-detail-history-item">
+                              <span class="kn-muted">${h.timestamp}</span>
+                              ${h.classification
+                                ? html`<span class="kn-badge kn-badge--dry-run"
+                                    >${h.classification}</span
+                                  >`
+                                : nothing}
+                              ${h.query
+                                ? html`<span class="kn-muted">"${h.query}"</span>`
+                                : nothing}
+                            </div>
+                          `,
+                        )}
+                      </div>`
+                    : html`<div class="kn-muted">${t("knowledge.detailNoHistory")}</div>`}
+                </div>
+
+                <!-- Section 4: Runtime References -->
+                <div class="kn-detail-section">
+                  <div class="kn-detail-section__label">${t("knowledge.detailRuntimeRefs")}</div>
+                  ${detail?.runtime_references?.length
+                    ? html`<div class="kn-detail-history">
+                        ${detail.runtime_references.map(
+                          (r) => html`
+                            <div class="kn-detail-history-item">
+                              <span class="kn-badge kn-badge--dry-run">${r.domain}</span>
+                              <span class="kn-muted">${r.reference_type}</span>
+                              <span class="kn-muted">${r.timestamp}</span>
+                            </div>
+                          `,
+                        )}
+                      </div>`
+                    : html`<div class="kn-muted">${t("knowledge.detailNoRuntimeRefs")}</div>`}
+                </div>
+
+                <!-- Section 5: System -->
+                <div class="kn-detail-section">
+                  <div class="kn-detail-section__label">${t("knowledge.detailSystem")}</div>
+                  <div class="kn-detail-row">
+                    <span class="kn-detail-key">${t("knowledge.id")}</span>
+                    <span class="kn-citation-line">${entry.id}</span>
+                  </div>
+                  ${entry.artifact_type
+                    ? html`<div class="kn-detail-row">
+                        <span class="kn-detail-key">${t("knowledge.artifactType")}</span>
+                        <span class="kn-muted">${entry.artifact_type}</span>
+                      </div>`
+                    : nothing}
+                  ${entry.created_at
+                    ? html`<div class="kn-detail-row">
+                        <span class="kn-detail-key">${t("knowledge.createdAt")}</span>
+                        <span class="kn-muted">${entry.created_at}</span>
+                      </div>`
+                    : nothing}
+                </div>
+              `
+            : html`<div class="kn-muted">${t("knowledge.detailNoData")}</div>`}
+    </aside>
   `;
 }
 
@@ -271,12 +527,14 @@ export function renderKnowledge(props: KnowledgeProps) {
     knowledgeConfirmPending,
     knowledgeConfirmExecuting,
     knowledgeConfirmResult,
+    knowledgeManifestDetailId,
     onQueryChange,
     onAction,
     onDryRun,
     onConfirmExecute,
     onCancelConfirm,
     onRefresh,
+    onManifestSelect,
   } = props;
 
   const panel = knowledgePanel;
@@ -363,6 +621,8 @@ export function renderKnowledge(props: KnowledgeProps) {
             onCancelConfirm,
             knowledgeConfirmExecuting,
             knowledgeConfirmResult,
+            panel?.manifest_entries,
+            onManifestSelect,
           )
         : nothing}
 
@@ -371,7 +631,11 @@ export function renderKnowledge(props: KnowledgeProps) {
         ? html`
             <div class="kn-section">
               <div class="kn-section-label">Manifest Registry (${panel.safe_manifest_count})</div>
-              <div class="kn-manifest-list">${panel.manifest_entries.map(renderManifestEntry)}</div>
+              <div class="kn-manifest-list">
+                ${panel.manifest_entries.map((entry) =>
+                  renderManifestEntry(entry, onManifestSelect, knowledgeManifestDetailId),
+                )}
+              </div>
             </div>
           `
         : nothing}
@@ -415,6 +679,9 @@ export function renderKnowledge(props: KnowledgeProps) {
             </div>
           `
         : nothing}
+
+      <!-- Manifest detail panel (Item 1) -->
+      ${renderManifestDetail(props)}
     </div>
   `;
 }

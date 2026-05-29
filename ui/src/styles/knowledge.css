@@ -335,3 +335,206 @@
   flex-wrap: wrap;
   padding: 4px 0;
 }
+
+/* ---- Clickable manifest card (Item 1) ---- */
+
+.kn-manifest-card--clickable {
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+
+.kn-manifest-card--clickable:hover {
+  border-color: var(--accent);
+}
+
+.kn-manifest-card--clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.kn-manifest-card--selected {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+
+/* ---- Manifest detail panel (Item 1) ---- */
+
+.kn-detail-overlay {
+  position: fixed;
+  inset: 0;
+  background: color-mix(in oklab, var(--bg, #000) 50%, transparent);
+  z-index: 40;
+}
+
+.kn-detail-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(420px, 92vw);
+  background: var(--panel);
+  border-left: 1px solid var(--border);
+  box-shadow: -8px 0 24px rgba(0, 0, 0, 0.18);
+  z-index: 41;
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kn-detail-panel__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.kn-detail-panel__title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text);
+  flex: 1 1 auto;
+  word-break: break-word;
+}
+
+.kn-detail-close {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 2px 6px;
+  border-radius: var(--radius);
+}
+
+.kn-detail-close:hover {
+  color: var(--text);
+  background: color-mix(in oklab, var(--panel) 60%, var(--border));
+}
+
+.kn-detail-section {
+  border-top: 1px solid var(--border);
+  padding: 12px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kn-detail-section:first-of-type {
+  border-top: none;
+}
+
+.kn-detail-section__label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.kn-detail-row {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.kn-detail-key {
+  color: var(--muted);
+  font-size: 11px;
+  min-width: 72px;
+}
+
+.kn-detail-badges {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.kn-detail-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.kn-detail-history-item {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ---- Retrieval result UX (Item 2) ---- */
+
+.kn-results__label {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.kn-why {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.kn-why-badge {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+  padding: 1px 6px;
+  border-radius: var(--radius);
+  white-space: nowrap;
+}
+
+.kn-related {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.kn-related-link {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 8px;
+}
+
+.kn-related-link:hover {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+
+.kn-citation-line {
+  font-family: var(--font-mono, monospace);
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 6px;
+  word-break: break-all;
+}
+
+.kn-provenance {
+  font-size: 11px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--border);
+  word-break: break-word;
+}
