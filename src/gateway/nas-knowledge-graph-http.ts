@@ -70,10 +70,14 @@ async function readManifests(): Promise<ManifestNodeSource[]> {
   const out: ManifestNodeSource[] = [];
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      continue;
+    }
     try {
       const e = JSON.parse(trimmed) as Record<string, unknown>;
-      if (typeof e.id !== "string") continue;
+      if (typeof e.id !== "string") {
+        continue;
+      }
       out.push({
         id: e.id,
         title: typeof e.title === "string" ? e.title : e.id,
@@ -96,7 +100,9 @@ function manifestNodeId(id: string): string {
 // to draw fallback edges from the proof files (which do not record returned ids).
 // Only matches tokens of length >= 3 against the manifest title/id (case-insensitive).
 function queryMatchesManifest(query: string | null, m: ManifestNodeSource): boolean {
-  if (!query) return false;
+  if (!query) {
+    return false;
+  }
   const haystack = `${m.title} ${m.id}`.toLowerCase();
   const tokens = query
     .toLowerCase()
@@ -165,7 +171,9 @@ export async function handleNasKnowledgeGraphHttpRequest(
     timestamp?: string,
   ): void => {
     // Only connect nodes that exist.
-    if (!nodes.has(source) || !nodes.has(target)) return;
+    if (!nodes.has(source) || !nodes.has(target)) {
+      return;
+    }
     const key = `${source}|${target}|${relation}`;
     const existing = edges.get(key);
     if (existing) {
@@ -198,21 +206,31 @@ export async function handleNasKnowledgeGraphHttpRequest(
   for (const [domain, state] of Object.entries(domains)) {
     const nodeId = `rt:${domain}`;
     const props: Record<string, string | number | boolean> = {};
-    if (typeof state.status === "string") props.status = state.status;
-    if (typeof state.pressure === "string") props.pressure = state.pressure;
-    if (typeof state.overall_severity === "string") props.severity = state.overall_severity;
+    if (typeof state.status === "string") {
+      props.status = state.status;
+    }
+    if (typeof state.pressure === "string") {
+      props.pressure = state.pressure;
+    }
+    if (typeof state.overall_severity === "string") {
+      props.severity = state.overall_severity;
+    }
     nodes.set(nodeId, { id: nodeId, type: "runtime_domain", label: domain, properties: props });
   }
 
   // ── Orchestration nodes + fallback edges from proof files ───────────────────
   const addProofOrchestration = (proof: Record<string, unknown> | null, nodeKey: string): void => {
-    if (!proof) return;
+    if (!proof) {
+      return;
+    }
     const action = typeof proof.action === "string" ? proof.action : null;
     const query = typeof proof.query === "string" ? proof.query : null;
     const classification = typeof proof.classification === "string" ? proof.classification : null;
     const timestamp = typeof proof.timestamp === "string" ? proof.timestamp : undefined;
     const relation = action ? ACTION_TO_RELATION[action] : undefined;
-    if (!relation) return;
+    if (!relation) {
+      return;
+    }
     const nodeId = `orch:${nodeKey}`;
     nodes.set(nodeId, {
       id: nodeId,

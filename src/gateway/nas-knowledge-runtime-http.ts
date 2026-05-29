@@ -61,10 +61,14 @@ async function readManifests(): Promise<ManifestMeta[]> {
   const out: ManifestMeta[] = [];
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      continue;
+    }
     try {
       const e = JSON.parse(trimmed) as Record<string, unknown>;
-      if (typeof e.id !== "string") continue;
+      if (typeof e.id !== "string") {
+        continue;
+      }
       out.push({
         id: e.id,
         title: typeof e.title === "string" ? e.title : e.id,
@@ -96,20 +100,29 @@ function scoreManifests(contextQuery: string, manifests: ManifestMeta[]): Releva
     .toLowerCase()
     .split(/[^a-z0-9]+/u)
     .filter((tok) => tok.length >= 3);
-  if (tokens.length === 0) return [];
+  if (tokens.length === 0) {
+    return [];
+  }
 
   const scored: RelevantManifest[] = [];
   for (const m of manifests) {
     // Governance-aware suppression: never advise on blocked or non-retrievable items.
-    if (m.decision === "blocked" || !m.retrieval_allowed) continue;
+    if (m.decision === "blocked" || !m.retrieval_allowed) {
+      continue;
+    }
     const title = m.title.toLowerCase();
     const reason = m.decision_reason.toLowerCase();
     let hits = 0;
     for (const tok of tokens) {
-      if (title.includes(tok)) hits += 2;
-      else if (reason.includes(tok)) hits += 1;
+      if (title.includes(tok)) {
+        hits += 2;
+      } else if (reason.includes(tok)) {
+        hits += 1;
+      }
     }
-    if (hits === 0) continue;
+    if (hits === 0) {
+      continue;
+    }
     const canonicalBoost = m.lifecycle_state === "active" ? 1.2 : 1.0;
     const score = Math.min(1, (hits / (tokens.length * 2)) * canonicalBoost);
     scored.push({
@@ -119,7 +132,7 @@ function scoreManifests(contextQuery: string, manifests: ManifestMeta[]): Releva
       suggested_action: score >= 0.5 ? "retrieve" : score >= 0.2 ? "review" : "none",
     });
   }
-  return scored.sort((a, b) => b.relevance_score - a.relevance_score).slice(0, 5);
+  return scored.toSorted((a, b) => b.relevance_score - a.relevance_score).slice(0, 5);
 }
 
 function appendAdvisoryLog(entry: Record<string, unknown>): void {
@@ -134,9 +147,13 @@ function appendAdvisoryLog(entry: Record<string, unknown>): void {
 }
 
 function asBoundedString(v: unknown, max: number): string | null {
-  if (typeof v !== "string") return null;
+  if (typeof v !== "string") {
+    return null;
+  }
   const trimmed = v.trim();
-  if (!trimmed) return null;
+  if (!trimmed) {
+    return null;
+  }
   return trimmed.slice(0, max);
 }
 

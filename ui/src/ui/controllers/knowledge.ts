@@ -1,4 +1,3 @@
-import { resolveControlUiAuthHeader } from "../control-ui-auth.ts";
 import type { UiSettings } from "../storage.ts";
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -211,13 +210,17 @@ export type KnowledgeState = {
 // Uses the same key format as storage.ts#tokenSessionKeyForGateway.
 function sessionStorageFallbackToken(gatewayUrl: string): string | null {
   try {
-    if (typeof sessionStorage === "undefined") return null;
+    if (typeof sessionStorage === "undefined") {
+      return null;
+    }
     const parsed = new URL(gatewayUrl);
     const pathname = parsed.pathname === "/" ? "" : parsed.pathname.replace(/\/+$/, "");
     const scope = `${parsed.protocol}//${parsed.host}${pathname}`;
     const key = `openclaw.control.token.v1:${scope}`;
     const raw = sessionStorage.getItem(key)?.trim() ?? null;
-    if (!raw) return null;
+    if (!raw) {
+      return null;
+    }
     // Reject tokens that would smuggle CR/LF into the HTTP header (same check as sanitizeHeaderToken).
     return /[\r\n]/.test(raw) ? null : raw;
   } catch {
@@ -270,7 +273,7 @@ function gatewayFetch(state: KnowledgeState, path: string, opts?: RequestInit): 
     headers: {
       "Content-Type": "application/json",
       ...(authHeader ? { Authorization: authHeader } : {}),
-      ...(opts?.headers ?? {}),
+      ...opts?.headers,
     },
   });
 }
@@ -279,10 +282,14 @@ function extractErrorMessage(
   err: string | Record<string, unknown> | unknown,
   fallback: string,
 ): string {
-  if (typeof err === "string") return err;
+  if (typeof err === "string") {
+    return err;
+  }
   if (err && typeof err === "object") {
     const e = err as Record<string, unknown>;
-    if (typeof e.message === "string") return e.message;
+    if (typeof e.message === "string") {
+      return e.message;
+    }
   }
   return fallback;
 }
@@ -428,10 +435,18 @@ export async function runKnowledgeAction(
   state.knowledgeConfirmResult = null;
   try {
     const body: Record<string, unknown> = { action };
-    if (opts.query) body.query = opts.query;
-    if (opts.path) body.path = opts.path;
-    if (opts.id) body.id = opts.id;
-    if (opts.limit) body.limit = opts.limit;
+    if (opts.query) {
+      body.query = opts.query;
+    }
+    if (opts.path) {
+      body.path = opts.path;
+    }
+    if (opts.id) {
+      body.id = opts.id;
+    }
+    if (opts.limit) {
+      body.limit = opts.limit;
+    }
 
     const res = await gatewayFetch(state, "/nas/knowledge-assist", {
       method: "POST",

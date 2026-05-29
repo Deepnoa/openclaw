@@ -55,27 +55,45 @@ export type KnowledgeProps = {
 // ── Pressure badge ─────────────────────────────────────────────────────────
 
 function pressureClass(pressure: string): string {
-  if (pressure === "critical") return "kn-badge--blocked";
-  if (pressure === "high") return "kn-badge--review";
-  if (pressure === "normal" || pressure === "low") return "kn-badge--allowed";
+  if (pressure === "critical") {
+    return "kn-badge--blocked";
+  }
+  if (pressure === "high") {
+    return "kn-badge--review";
+  }
+  if (pressure === "normal" || pressure === "low") {
+    return "kn-badge--allowed";
+  }
   return "kn-badge--dry-run";
 }
 
 function decisionClass(decision: string): string {
-  if (decision === "blocked") return "kn-badge--blocked";
-  if (decision === "review_required") return "kn-badge--review";
-  if (decision === "allowed") return "kn-badge--allowed";
+  if (decision === "blocked") {
+    return "kn-badge--blocked";
+  }
+  if (decision === "review_required") {
+    return "kn-badge--review";
+  }
+  if (decision === "allowed") {
+    return "kn-badge--allowed";
+  }
   return "kn-badge--dry-run";
 }
 
 function lifecycleClass(lifecycle: string | undefined): string {
-  if (lifecycle === "active") return "kn-badge--allowed";
-  if (lifecycle === "archived") return "kn-badge--dry-run";
+  if (lifecycle === "active") {
+    return "kn-badge--allowed";
+  }
+  if (lifecycle === "archived") {
+    return "kn-badge--dry-run";
+  }
   return "kn-badge--review";
 }
 
 function renderBoolBadge(label: string, value: boolean | undefined) {
-  if (value === undefined) return nothing;
+  if (value === undefined) {
+    return nothing;
+  }
   return html`<span class="kn-badge ${value ? "kn-badge--allowed" : "kn-badge--blocked"}"
     >${label}: ${value ? "yes" : "no"}</span
   >`;
@@ -177,7 +195,9 @@ function findRelatedManifests(
   entry: RetrievalEntry,
   manifestEntries: ManifestEntry[] | undefined,
 ): ManifestEntry[] {
-  if (!manifestEntries?.length) return [];
+  if (!manifestEntries?.length) {
+    return [];
+  }
   return manifestEntries
     .filter(
       (m) =>
@@ -567,8 +587,8 @@ function renderKnowledgeGraph(props: KnowledgeProps) {
   }
 
   const nodeById = new Map(knowledgeGraph.nodes.map((n) => [n.id, n]));
-  const relationsPresent = [...new Set(knowledgeGraph.edges.map((e) => e.relation))].sort();
-  const nodeTypesPresent = [...new Set(knowledgeGraph.nodes.map((n) => n.type))].sort();
+  const relationsPresent = [...new Set(knowledgeGraph.edges.map((e) => e.relation))].toSorted();
+  const nodeTypesPresent = [...new Set(knowledgeGraph.nodes.map((n) => n.type))].toSorted();
 
   const matchesFilter = (edge: (typeof knowledgeGraph.edges)[number]): boolean => {
     if (knowledgeGraphFilter.relation && edge.relation !== knowledgeGraphFilter.relation) {
@@ -825,7 +845,9 @@ export function renderKnowledge(props: KnowledgeProps) {
           .value=${knowledgeQuery}
           @input=${(e: Event) => onQueryChange((e.target as HTMLInputElement).value)}
           @keydown=${(e: KeyboardEvent) => {
-            if (e.key === "Enter") onAction("propose", knowledgeQuery);
+            if (e.key === "Enter") {
+              onAction("propose", knowledgeQuery);
+            }
           }}
         />
         <button

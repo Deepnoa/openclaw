@@ -214,7 +214,9 @@ async function readManifestMeta(): Promise<ManifestMeta[]> {
   const out: ManifestMeta[] = [];
   for (const line of text.split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed) continue;
+    if (!trimmed) {
+      continue;
+    }
     try {
       const e = JSON.parse(trimmed) as Record<string, unknown>;
       if (typeof e.id === "string") {
@@ -249,13 +251,22 @@ export async function readConsumptionStats(): Promise<ConsumptionStats> {
   const referencedIds = new Set<string>();
 
   for (const ev of events) {
-    if (ev.event_type === "retrieve") total_retrievals += 1;
-    else if (ev.event_type === "discover") total_discoveries += 1;
-    else if (ev.event_type === "proposal") total_proposals += 1;
-    else if (ev.event_type === "ingestion") total_ingestions += 1;
+    if (ev.event_type === "retrieve") {
+      total_retrievals += 1;
+    } else if (ev.event_type === "discover") {
+      total_discoveries += 1;
+    } else if (ev.event_type === "proposal") {
+      total_proposals += 1;
+    } else if (ev.event_type === "ingestion") {
+      total_ingestions += 1;
+    }
 
-    if (ev.outcome === "blocked") blocked_attempts += 1;
-    if (ev.outcome === "not_found") not_found_attempts += 1;
+    if (ev.outcome === "blocked") {
+      blocked_attempts += 1;
+    }
+    if (ev.outcome === "not_found") {
+      not_found_attempts += 1;
+    }
 
     for (const id of ev.manifest_ids ?? []) {
       refCount.set(id, (refCount.get(id) ?? 0) + 1);
@@ -270,7 +281,7 @@ export async function readConsumptionStats(): Promise<ConsumptionStats> {
 
   const top_manifests = [...refCount.entries()]
     .map(([id, count]) => ({ id, title: titleById(id), count }))
-    .sort((a, b) => b.count - a.count)
+    .toSorted((a, b) => b.count - a.count)
     .slice(0, 5);
 
   // Active manifests never referenced in the log window.
@@ -294,9 +305,7 @@ export async function readConsumptionStats(): Promise<ConsumptionStats> {
 }
 
 // Per-manifest usage metrics for the detail view (retrieval count, first/last seen).
-export async function readManifestUsage(
-  id: string,
-): Promise<{
+export async function readManifestUsage(id: string): Promise<{
   retrieval_count: number;
   first_retrieved: string | null;
   last_retrieved: string | null;
@@ -306,10 +315,16 @@ export async function readManifestUsage(
   let first: string | null = null;
   let last: string | null = null;
   for (const ev of events) {
-    if (!ev.manifest_ids?.includes(id)) continue;
+    if (!ev.manifest_ids?.includes(id)) {
+      continue;
+    }
     count += 1;
-    if (!first || ev.timestamp < first) first = ev.timestamp;
-    if (!last || ev.timestamp > last) last = ev.timestamp;
+    if (!first || ev.timestamp < first) {
+      first = ev.timestamp;
+    }
+    if (!last || ev.timestamp > last) {
+      last = ev.timestamp;
+    }
   }
   return { retrieval_count: count, first_retrieved: first, last_retrieved: last };
 }
