@@ -95,6 +95,9 @@ let nasKnowledgeGraphHttpModulePromise:
 let nasKnowledgeConsumptionStatsHttpModulePromise:
   | Promise<typeof import("./nas-knowledge-consumption-stats-http.js")>
   | undefined;
+let nasKnowledgeGovernanceStatusHttpModulePromise:
+  | Promise<typeof import("./nas-knowledge-governance-status-http.js")>
+  | undefined;
 let nasKnowledgeRuntimeHttpModulePromise:
   | Promise<typeof import("./nas-knowledge-runtime-http.js")>
   | undefined;
@@ -194,6 +197,12 @@ function getNasKnowledgeConsumptionStatsHttpModule() {
   nasKnowledgeConsumptionStatsHttpModulePromise ??=
     import("./nas-knowledge-consumption-stats-http.js");
   return nasKnowledgeConsumptionStatsHttpModulePromise;
+}
+
+function getNasKnowledgeGovernanceStatusHttpModule() {
+  nasKnowledgeGovernanceStatusHttpModulePromise ??=
+    import("./nas-knowledge-governance-status-http.js");
+  return nasKnowledgeGovernanceStatusHttpModulePromise;
 }
 
 function getNasKnowledgeRuntimeHttpModule() {
@@ -335,6 +344,10 @@ function isNasKnowledgeGraphPath(pathname: string): boolean {
 
 function isNasKnowledgeConsumptionStatsPath(pathname: string): boolean {
   return pathname === "/nas/knowledge-consumption-stats";
+}
+
+function isNasKnowledgeGovernanceStatusPath(pathname: string): boolean {
+  return pathname === "/nas/knowledge-governance-status";
 }
 
 function isNasKnowledgeRuntimePath(pathname: string): boolean {
@@ -870,6 +883,20 @@ export function createGatewayHttpServer(opts: {
             (
               await getNasKnowledgeConsumptionStatsHttpModule()
             ).handleNasKnowledgeConsumptionStatsHttpRequest(req, res, {
+              auth: resolvedAuth,
+              trustedProxies,
+              allowRealIpFallback,
+              rateLimiter,
+            }),
+        });
+      }
+      if (isNasKnowledgeGovernanceStatusPath(scopedRequestPath)) {
+        requestStages.push({
+          name: "nas-knowledge-governance-status",
+          run: async () =>
+            (
+              await getNasKnowledgeGovernanceStatusHttpModule()
+            ).handleNasKnowledgeGovernanceStatusHttpRequest(req, res, {
               auth: resolvedAuth,
               trustedProxies,
               allowRealIpFallback,
