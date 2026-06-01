@@ -7,6 +7,10 @@ import {
   resolveOpenAiCompatibleHttpOperatorScopes,
 } from "./http-utils.js";
 import { runGovernedIngestion, validateIngestRequest } from "./nas-ingest-governed-file-shared.js";
+import {
+  appendConsumptionEvent,
+  buildConsumptionEventFromIngestion,
+} from "./nas-knowledge-consumption.js";
 
 // Ingestion requests are tiny ({path, mode}); keep the body cap small.
 const DEFAULT_BODY_BYTES = 64 * 1024;
@@ -69,5 +73,11 @@ export async function handleNasIngestGovernedFileHttpRequest(
     exit_code: result.exit_code,
     result: result.decision,
   });
+
+  // Append-only consumption tracking (Item 5) — only for actual ingestion, never
+  // dry-run. Fire-and-forget after the response; records outcome, not file path.
+  if (result.mode === "execute") {
+    appendConsumptionEvent(buildConsumptionEventFromIngestion(result.decision));
+  }
   return true;
 }

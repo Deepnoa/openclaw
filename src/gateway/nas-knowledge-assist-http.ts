@@ -7,6 +7,10 @@ import {
   resolveOpenAiCompatibleHttpOperatorScopes,
 } from "./http-utils.js";
 import { runKnowledgeOrchestration, validateAssistRequest } from "./nas-knowledge-assist-shared.js";
+import {
+  appendConsumptionEvent,
+  buildConsumptionEventFromAssist,
+} from "./nas-knowledge-consumption.js";
 
 const DEFAULT_BODY_BYTES = 64 * 1024;
 
@@ -90,5 +94,16 @@ export async function handleNasKnowledgeAssistHttpRequest(
     confirmation_required: result.confirmation_required,
     result: result.result,
   });
+
+  // Append-only consumption tracking (Item 5). Fire-and-forget after the response
+  // is sent so a logging failure can never affect the user flow. Records only
+  // manifest ids + outcome — no query text, content, paths, or identity.
+  const consumptionEvent = buildConsumptionEventFromAssist(
+    result.action,
+    result.result as Record<string, unknown> | null,
+  );
+  if (consumptionEvent) {
+    appendConsumptionEvent(consumptionEvent);
+  }
   return true;
 }

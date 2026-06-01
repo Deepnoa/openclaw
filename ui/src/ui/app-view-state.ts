@@ -12,6 +12,9 @@ import type {
   KnowledgePanelData,
   KnowledgeActionResult,
   IngestDryRunData,
+  ManifestDetailData,
+  KnowledgeGraphData,
+  ConsumptionStats,
 } from "./controllers/knowledge.ts";
 import type {
   ClawHubSearchResult,
@@ -503,6 +506,17 @@ export type AppViewState = {
     knowledgeConfirmPending: { path: string; dryRunResult: IngestDryRunData } | null;
     knowledgeConfirmExecuting: boolean;
     knowledgeConfirmResult: string | null;
+    knowledgeManifestDetailId: string | null;
+    knowledgeManifestDetail: ManifestDetailData | null;
+    knowledgeManifestDetailLoading: boolean;
+    knowledgeManifestDetailError: string | null;
+    knowledgeGraph: KnowledgeGraphData | null;
+    knowledgeGraphLoading: boolean;
+    knowledgeGraphError: string | null;
+    knowledgeGraphFilter: { nodeType: string | null; relation: string | null };
+    knowledgeConsumptionStats: ConsumptionStats | null;
+    knowledgeConsumptionStatsLoading: boolean;
+    knowledgeConsumptionStatsError: string | null;
     webPushSupported: boolean;
     webPushPermission: NotificationPermission | "unsupported";
     webPushSubscribed: boolean;
