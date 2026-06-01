@@ -341,7 +341,9 @@ async function launchDocumentRequestRuntime(
   );
   let terminalHandled = false;
   const enqueueLostTask = (reason: string, exitCode: number | null, signal?: string | null) => {
-    if (terminalHandled) return;
+    if (terminalHandled) {
+      return;
+    }
     terminalHandled = true;
     void (async () => {
       await appendRuntimeEvent({

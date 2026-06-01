@@ -268,20 +268,21 @@ function gatewayFetch(state: KnowledgeState, path: string, opts?: RequestInit): 
     .replace(/^wss:\/\//, "https://")
     .replace(/^ws:\/\//, "http://");
   const { header: authHeader } = resolveKnowledgeHttpAuthHeader(state);
+  const callerHeaders =
+    opts?.headers && !Array.isArray(opts.headers) && !(opts.headers instanceof Headers)
+      ? opts.headers
+      : {};
   return fetch(`${httpBase}${path}`, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
       ...(authHeader ? { Authorization: authHeader } : {}),
-      ...opts?.headers,
+      ...callerHeaders,
     },
   });
 }
 
-function extractErrorMessage(
-  err: string | Record<string, unknown> | unknown,
-  fallback: string,
-): string {
+function extractErrorMessage(err: unknown, fallback: string): string {
   if (typeof err === "string") {
     return err;
   }

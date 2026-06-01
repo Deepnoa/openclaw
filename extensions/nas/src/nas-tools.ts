@@ -1030,10 +1030,18 @@ async function runKnowledgeOrchestrationSkill(rawParams: {
   });
 
   const args: string[] = ["--action", action, "--limit", String(limit)];
-  if (query) args.push("--query", query);
-  if (filePath) args.push("--path", filePath);
-  if (id) args.push("--id", id);
-  if (roots && roots.length > 0) args.push("--roots", roots.join(","));
+  if (query) {
+    args.push("--query", query);
+  }
+  if (filePath) {
+    args.push("--path", filePath);
+  }
+  if (id) {
+    args.push("--id", id);
+  }
+  if (roots && roots.length > 0) {
+    args.push("--roots", roots.join(","));
+  }
 
   const jsonOut = path.join(
     "/tmp",

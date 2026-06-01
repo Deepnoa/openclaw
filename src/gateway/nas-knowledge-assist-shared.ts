@@ -76,7 +76,7 @@ export function validateAssistRequest(
     return {
       ok: false,
       status: 400,
-      error: `invalid_action: '${action}'. Valid actions: ${[...VALID_ACTIONS].sort().join(", ")}`,
+      error: `invalid_action: '${action}'. Valid actions: ${[...VALID_ACTIONS].toSorted().join(", ")}`,
     };
   }
 
@@ -170,10 +170,18 @@ export async function runKnowledgeOrchestration(
   limit: number,
 ): Promise<AssistSuccess | AssistFailure> {
   const args: string[] = ["--action", action, "--limit", String(limit)];
-  if (query) args.push("--query", query);
-  if (filePath) args.push("--path", filePath);
-  if (id) args.push("--id", id);
-  if (roots && roots.length > 0) args.push("--roots", roots.join(","));
+  if (query) {
+    args.push("--query", query);
+  }
+  if (filePath) {
+    args.push("--path", filePath);
+  }
+  if (id) {
+    args.push("--id", id);
+  }
+  if (roots && roots.length > 0) {
+    args.push("--roots", roots.join(","));
+  }
 
   const timestamp = new Date().toISOString();
   let stdout = "";
