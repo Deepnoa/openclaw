@@ -8,7 +8,7 @@ import {
   authorizeScopedGatewayHttpRequestOrReply,
   resolveOpenAiCompatibleHttpOperatorScopes,
 } from "./http-utils.js";
-import { readManifestUsage } from "./nas-knowledge-consumption.js";
+import { readConsumptionEvents, readManifestUsage } from "./nas-knowledge-consumption.js";
 
 const REGISTRY_ROOT = process.env.DEEPNOA_REGISTRY ?? "/home/deepnoa/deepnoa-registry";
 
@@ -20,6 +20,22 @@ const ORCHESTRATION_PROOF_PATH = path.join(
   REGISTRY_ROOT,
   "observability/knowledge-orchestration/knowledge-orchestration-proof.json",
 );
+const RUNTIME_ADVISORY_PATH = path.join(
+  REGISTRY_ROOT,
+  "observability/knowledge-orchestration/runtime-advisory.jsonl",
+);
+
+// Registry-relative path descriptors. These are the strings surfaced to the UI
+// via runtime_references[].source_file. They are stable logical paths inside
+// the registry — never absolute filesystem paths and never the CIFS mount.
+const SOURCE_FILE_ADVISORY = "observability/knowledge-orchestration/runtime-advisory.jsonl";
+const SOURCE_FILE_CONSUMPTION = "observability/knowledge-consumption/consumption-log.jsonl";
+const SOURCE_FILE_ORCHESTRATION =
+  "observability/knowledge-orchestration/knowledge-orchestration-proof.json";
+
+const SUMMARY_MAX_LEN = 140;
+const RUNTIME_REFERENCES_MAX_PER_SOURCE = 20;
+const RUNTIME_REFERENCES_MAX_TOTAL = 50;
 
 // Fields safe to surface for a single manifest entry. Never expose evidence_ref,
 // source_refs, summary_ref, source_summary_path, or any filesystem path: the id
@@ -94,6 +110,233 @@ type RetrievalHistoryEntry = {
   classification: string | null;
   routed_to: string[];
 };
+
+type RuntimeReferenceType = "advisory_citation" | "consumption_event" | "orchestration_citation";
+
+type RuntimeReference = {
+  ref_type: RuntimeReferenceType;
+  timestamp: string;
+  source_file: string;
+  summary: string;
+  metadata: Record<string, unknown>;
+};
+
+function truncateSummary(value: string): string {
+  const trimmed = value.replace(/\s+/gu, " ").trim();
+  return trimmed.length <= SUMMARY_MAX_LEN ? trimmed : `${trimmed.slice(0, SUMMARY_MAX_LEN - 1)}…`;
+}
+
+function safeVocab(value: unknown, max = 64): string | null {
+  if (typeof value !== "string") {
+    return null;
+  }
+  const v = value.trim();
+  if (!v) {
+    return null;
+  }
+  return v.slice(0, max);
+}
+
+function countOtherIds(allIds: unknown, targetId: string): number {
+  if (!Array.isArray(allIds)) {
+    return 0;
+  }
+  let count = 0;
+  for (const id of allIds) {
+    if (typeof id === "string" && id !== targetId) {
+      count += 1;
+    }
+  }
+  return count;
+}
+
+// S1: append-only runtime advisories cited this manifest_id in relevant_manifest_ids.
+// Returns one reference per matching advisory line. Never surfaces other manifests'
+// ids — only a co_referenced_count integer to indicate the cite was multi-manifest.
+async function readAdvisoryReferences(manifestId: string): Promise<RuntimeReference[]> {
+  let text: string;
+  try {
+    text = await readFile(RUNTIME_ADVISORY_PATH, "utf8");
+  } catch {
+    return [];
+  }
+  const refs: RuntimeReference[] = [];
+  for (const rawLine of text.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) {
+      continue;
+    }
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(line) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    const ids = parsed.relevant_manifest_ids;
+    if (!Array.isArray(ids) || !ids.includes(manifestId)) {
+      continue;
+    }
+    const timestamp = safeVocab(parsed.timestamp, 40);
+    if (!timestamp) {
+      continue;
+    }
+    const advisoryType = safeVocab(parsed.advisory_type) ?? "advisory";
+    const confidence = safeVocab(parsed.confidence) ?? "unknown";
+    const action = safeVocab(parsed.recommended_knowledge_action);
+    const domain = safeVocab(parsed.domain);
+    const incidentType = safeVocab(parsed.incident_type);
+    const pressure = safeVocab(parsed.pressure);
+    const requiresOperator = parsed.requires_operator_action === true;
+    const others = countOtherIds(ids, manifestId);
+    const summaryParts = [
+      `type=${advisoryType}`,
+      `confidence=${confidence}`,
+      action ? `action=${action}` : null,
+      domain ? `domain=${domain}` : null,
+      incidentType ? `incident=${incidentType}` : null,
+      others > 0 ? `co_referenced=${others}` : null,
+    ].filter((p): p is string => p !== null);
+    refs.push({
+      ref_type: "advisory_citation",
+      timestamp,
+      source_file: SOURCE_FILE_ADVISORY,
+      summary: truncateSummary(summaryParts.join(" ")),
+      metadata: {
+        advisory_type: advisoryType,
+        confidence,
+        recommended_knowledge_action: action,
+        domain,
+        incident_type: incidentType,
+        pressure,
+        requires_operator_action: requiresOperator,
+        co_referenced_count: others,
+      },
+    });
+  }
+  return refs;
+}
+
+// S6: append-only consumption events cited this manifest_id in manifest_ids.
+// Reuses readConsumptionEvents() which already honors DEEPNOA_CONSUMPTION_LOG_PATH
+// (Phase C P1 re-pointed this to the NAS canonical location). Per-manifest detail
+// surfaces event_type / outcome / classification only — never agent_id, never
+// session_key, never raw query text.
+async function readConsumptionReferences(manifestId: string): Promise<RuntimeReference[]> {
+  const events = await readConsumptionEvents();
+  const refs: RuntimeReference[] = [];
+  for (const e of events) {
+    if (!Array.isArray(e.manifest_ids) || !e.manifest_ids.includes(manifestId)) {
+      continue;
+    }
+    const timestamp = safeVocab(e.timestamp, 40);
+    if (!timestamp) {
+      continue;
+    }
+    const eventType = safeVocab(e.event_type) ?? "event";
+    const outcome = safeVocab(e.outcome) ?? "unknown";
+    const classification = safeVocab(e.classification);
+    const others = countOtherIds(e.manifest_ids, manifestId);
+    const summaryParts = [
+      `event=${eventType}`,
+      `outcome=${outcome}`,
+      classification ? `class=${classification}` : null,
+      others > 0 ? `co_referenced=${others}` : null,
+    ].filter((p): p is string => p !== null);
+    refs.push({
+      ref_type: "consumption_event",
+      timestamp,
+      source_file: SOURCE_FILE_CONSUMPTION,
+      summary: truncateSummary(summaryParts.join(" ")),
+      metadata: {
+        event_type: eventType,
+        outcome,
+        classification,
+        co_referenced_count: others,
+      },
+    });
+  }
+  return refs;
+}
+
+// S4: the latest orchestration proof points at this manifest_id when action=retrieve
+// and proof.id === manifestId. Discover/propose proofs are aggregate and do not pin
+// a single manifest, so they are not emitted here (consumption events from the same
+// flow already provide per-manifest coverage via S6).
+async function readOrchestrationReference(manifestId: string): Promise<RuntimeReference[]> {
+  let proof: Record<string, unknown> | null = null;
+  try {
+    proof = JSON.parse(await readFile(ORCHESTRATION_PROOF_PATH, "utf8")) as Record<string, unknown>;
+  } catch {
+    return [];
+  }
+  if (!proof) {
+    return [];
+  }
+  const action = safeVocab(proof.action);
+  const proofId = safeVocab(proof.id);
+  if (action !== "retrieve" || proofId !== manifestId) {
+    return [];
+  }
+  const timestamp = safeVocab(proof.timestamp, 40) ?? safeVocab(proof.generated_at, 40);
+  if (!timestamp) {
+    return [];
+  }
+  const classification = safeVocab(proof.classification);
+  const routedTo = Array.isArray(proof.routed_to)
+    ? proof.routed_to.filter((v): v is string => typeof v === "string").slice(0, 8)
+    : [];
+  const summaryParts = [
+    `action=${action}`,
+    classification ? `class=${classification}` : null,
+    routedTo.length > 0 ? `routed_to=${routedTo.length}` : null,
+  ].filter((p): p is string => p !== null);
+  return [
+    {
+      ref_type: "orchestration_citation",
+      timestamp,
+      source_file: SOURCE_FILE_ORCHESTRATION,
+      summary: truncateSummary(summaryParts.join(" ")),
+      metadata: {
+        action,
+        classification,
+        routed_to: routedTo,
+      },
+    },
+  ];
+}
+
+async function buildRuntimeReferences(manifestId: string): Promise<{
+  references: RuntimeReference[];
+  per_source_counts: { advisory: number; consumption: number; orchestration: number };
+  truncated: boolean;
+}> {
+  const [advisory, consumption, orchestration] = await Promise.all([
+    readAdvisoryReferences(manifestId),
+    readConsumptionReferences(manifestId),
+    readOrchestrationReference(manifestId),
+  ]);
+  // Cap per source first to prevent any one source from dominating the response.
+  const advisoryCapped = advisory
+    .toSorted((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .slice(0, RUNTIME_REFERENCES_MAX_PER_SOURCE);
+  const consumptionCapped = consumption
+    .toSorted((a, b) => b.timestamp.localeCompare(a.timestamp))
+    .slice(0, RUNTIME_REFERENCES_MAX_PER_SOURCE);
+  const orchestrationCapped = orchestration.slice(0, RUNTIME_REFERENCES_MAX_PER_SOURCE);
+  const combined = [...advisoryCapped, ...consumptionCapped, ...orchestrationCapped].toSorted(
+    (a, b) => b.timestamp.localeCompare(a.timestamp),
+  );
+  const truncated = combined.length > RUNTIME_REFERENCES_MAX_TOTAL;
+  return {
+    references: combined.slice(0, RUNTIME_REFERENCES_MAX_TOTAL),
+    per_source_counts: {
+      advisory: advisory.length,
+      consumption: consumption.length,
+      orchestration: orchestration.length,
+    },
+    truncated,
+  };
+}
 
 // Phase A retrieval history is derived from the single latest orchestration proof.
 // The proof does not record which manifest ids were returned, so we surface it as
@@ -181,9 +424,10 @@ export async function handleNasKnowledgeManifestHttpRequest(
     return true;
   }
 
-  const [retrievalHistory, usage] = await Promise.all([
+  const [retrievalHistory, usage, runtimeRefs] = await Promise.all([
     readRetrievalHistory(),
     readManifestUsage(rawId),
+    buildRuntimeReferences(rawId),
   ]);
 
   sendJson(res, 200, {
@@ -196,15 +440,26 @@ export async function handleNasKnowledgeManifestHttpRequest(
       first_retrieved: usage.first_retrieved,
       last_retrieved: usage.last_retrieved,
     },
-    // Runtime references are stubbed in Phase A; populated once runtime integration
-    // (Phase B Item 6) wires manifest ids into loop-state references.
-    runtime_references: [],
+    // Phase C P3 — runtime references reverse-lookup from S1 (runtime-advisory.jsonl),
+    // S6 (consumption-log.jsonl, NAS canonical via DEEPNOA_CONSUMPTION_LOG_PATH), and
+    // S4 (knowledge-orchestration-proof.json). Surfaces ref_type/timestamp/source_file/
+    // summary/metadata only — never other manifests' ids, never operator identity,
+    // never filesystem absolute paths, never raw content.
+    runtime_references: runtimeRefs.references,
+    runtime_references_meta: {
+      per_source_counts: runtimeRefs.per_source_counts,
+      truncated: runtimeRefs.truncated,
+      max_per_source: RUNTIME_REFERENCES_MAX_PER_SOURCE,
+      max_total: RUNTIME_REFERENCES_MAX_TOTAL,
+    },
     safety_constraints: {
       evidence_ref_exposed: false,
       source_refs_exposed: false,
       summary_ref_exposed: false,
       raw_content_returned: false,
       filesystem_paths_exposed: false,
+      other_manifest_ids_exposed: false,
+      operator_identity_exposed: false,
     },
   });
   return true;
