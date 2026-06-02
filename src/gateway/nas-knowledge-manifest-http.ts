@@ -9,6 +9,10 @@ import {
   resolveOpenAiCompatibleHttpOperatorScopes,
 } from "./http-utils.js";
 import { readConsumptionEvents, readManifestUsage } from "./nas-knowledge-consumption.js";
+import {
+  readRetrievalHistoryForManifest,
+  type RetrievalHistoryRecord,
+} from "./nas-knowledge-retrieval-history.js";
 
 const REGISTRY_ROOT = process.env.DEEPNOA_REGISTRY ?? "/home/deepnoa/deepnoa-registry";
 
@@ -103,13 +107,6 @@ async function findManifestEntryById(id: string): Promise<Record<string, unknown
   }
   return null;
 }
-
-type RetrievalHistoryEntry = {
-  timestamp: string;
-  query: string | null;
-  classification: string | null;
-  routed_to: string[];
-};
 
 type RuntimeReferenceType = "advisory_citation" | "consumption_event" | "orchestration_citation";
 
@@ -338,43 +335,24 @@ async function buildRuntimeReferences(manifestId: string): Promise<{
   };
 }
 
-// Phase A retrieval history is derived from the single latest orchestration proof.
-// The proof does not record which manifest ids were returned, so we surface it as
-// recent read activity only when the latest action was a read (retrieve/discover).
-// When no proof exists or the latest action was not a read, return [] — never error.
-async function readRetrievalHistory(): Promise<RetrievalHistoryEntry[]> {
-  let proof: Record<string, unknown> | null = null;
-  try {
-    proof = JSON.parse(await readFile(ORCHESTRATION_PROOF_PATH, "utf8")) as Record<string, unknown>;
-  } catch {
-    return [];
+// Phase C P4 — per-manifest retrieval history aggregator. Reads the append-only
+// retrieval-history.jsonl filtered by manifest_id. Replaces the Phase A snapshot
+// derivation that read the single latest orchestration-proof and was neither
+// append-only nor per-manifest. The new shape exposes event_type / source /
+// reason / outcome / classification per record; query is hard-null (P5 gate).
+async function buildRetrievalHistoryFor(manifestId: string): Promise<{
+  records: RetrievalHistoryRecord[];
+  per_source_counts: Record<string, number>;
+  per_event_counts: Record<string, number>;
+}> {
+  const records = await readRetrievalHistoryForManifest(manifestId);
+  const per_source_counts: Record<string, number> = {};
+  const per_event_counts: Record<string, number> = {};
+  for (const r of records) {
+    per_source_counts[r.source] = (per_source_counts[r.source] ?? 0) + 1;
+    per_event_counts[r.event_type] = (per_event_counts[r.event_type] ?? 0) + 1;
   }
-  if (!proof) {
-    return [];
-  }
-  const action = typeof proof.action === "string" ? proof.action : null;
-  if (action !== "retrieve" && action !== "discover") {
-    return [];
-  }
-  const timestamp =
-    typeof proof.timestamp === "string"
-      ? proof.timestamp
-      : typeof proof.generated_at === "string"
-        ? proof.generated_at
-        : null;
-  if (!timestamp) {
-    return [];
-  }
-  return [
-    {
-      timestamp,
-      query: typeof proof.query === "string" ? proof.query : null,
-      classification: typeof proof.classification === "string" ? proof.classification : null,
-      routed_to: Array.isArray(proof.routed_to)
-        ? proof.routed_to.filter((v): v is string => typeof v === "string")
-        : [],
-    },
-  ];
+  return { records, per_source_counts, per_event_counts };
 }
 
 export async function handleNasKnowledgeManifestHttpRequest(
@@ -425,7 +403,7 @@ export async function handleNasKnowledgeManifestHttpRequest(
   }
 
   const [retrievalHistory, usage, runtimeRefs] = await Promise.all([
-    readRetrievalHistory(),
+    buildRetrievalHistoryFor(rawId),
     readManifestUsage(rawId),
     buildRuntimeReferences(rawId),
   ]);
@@ -433,7 +411,17 @@ export async function handleNasKnowledgeManifestHttpRequest(
   sendJson(res, 200, {
     ok: true,
     entry: pickSafeFields(rawEntry),
-    retrieval_history: retrievalHistory,
+    // Phase C P4 — per-manifest append-only history (retrieval-history.jsonl).
+    // Replaces the Phase A snapshot derivation. query is hard-null until the
+    // P5 privacy decision lands. source / reason / outcome / classification
+    // are controlled vocabulary; agent_id and user identity are never logged.
+    retrieval_history: retrievalHistory.records,
+    retrieval_history_meta: {
+      total_returned: retrievalHistory.records.length,
+      per_source_counts: retrievalHistory.per_source_counts,
+      per_event_counts: retrievalHistory.per_event_counts,
+      query_persisted: false,
+    },
     // Per-manifest usage metrics from the append-only consumption log (Phase B Item 5).
     usage: {
       retrieval_count: usage.retrieval_count,

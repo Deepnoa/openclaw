@@ -8,6 +8,10 @@ import {
   authorizeScopedGatewayHttpRequestOrReply,
   resolveOpenAiCompatibleHttpOperatorScopes,
 } from "./http-utils.js";
+import {
+  appendRetrievalHistoryRecords,
+  buildRetrievalHistoryRecordsFromAdvisory,
+} from "./nas-knowledge-retrieval-history.js";
 
 const REGISTRY_ROOT = process.env.DEEPNOA_REGISTRY ?? "/home/deepnoa/deepnoa-registry";
 
@@ -251,6 +255,21 @@ export async function handleNasKnowledgeRuntimeHttpRequest(
     requires_operator_action: false,
     timestamp: new Date().toISOString(),
   });
+
+  // Phase C P4 — append-only per-manifest retrieval history. Mirrors the
+  // advisory write: fire-and-forget, sanitized, query is hard-null. source is
+  // "advisory" because this endpoint is the advisor-driven entry path.
+  appendRetrievalHistoryRecords(
+    buildRetrievalHistoryRecordsFromAdvisory(
+      relevant.map((r) => r.id),
+      {
+        source: "advisory",
+        actor: null,
+        recommendedAction: recommendedKnowledgeAction,
+        confidence,
+      },
+    ),
+  );
 
   sendJson(res, 200, {
     ok: true,

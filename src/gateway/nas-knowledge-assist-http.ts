@@ -11,6 +11,10 @@ import {
   appendConsumptionEvent,
   buildConsumptionEventFromAssist,
 } from "./nas-knowledge-consumption.js";
+import {
+  appendRetrievalHistoryRecords,
+  buildRetrievalHistoryRecordsFromAssist,
+} from "./nas-knowledge-retrieval-history.js";
 
 const DEFAULT_BODY_BYTES = 64 * 1024;
 
@@ -105,5 +109,17 @@ export async function handleNasKnowledgeAssistHttpRequest(
   if (consumptionEvent) {
     appendConsumptionEvent(consumptionEvent);
   }
+
+  // Phase C P4 — append-only per-(event, manifest) retrieval history. Same
+  // fire-and-forget posture as consumption tracking; query is hard-null until
+  // the P5 privacy decision lands. Default source is operator_ui because the
+  // assist endpoint is the operator-driven entry point.
+  appendRetrievalHistoryRecords(
+    buildRetrievalHistoryRecordsFromAssist(
+      result.action,
+      result.result as Record<string, unknown> | null,
+      { source: "operator_ui", actor: null },
+    ),
+  );
   return true;
 }
