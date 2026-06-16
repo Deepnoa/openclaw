@@ -82,10 +82,10 @@ def _payload_safety_error(payload: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
-def _join_ids(value: Any) -> str:
-    """Join id-list fields safely: coerce each element to str, tolerate non-lists."""
+def _join_ids(value: Any, empty: str = "-") -> str:
+    """Join list display fields safely: coerce each element to str, tolerate non-lists."""
     if not isinstance(value, list) or not value:
-        return "-"
+        return empty
     return ", ".join(str(v) for v in value)
 
 
@@ -100,13 +100,10 @@ def format_citations(citations: list[dict[str, Any]]) -> str:
 
 
 def format_disclosures(payload: dict[str, Any]) -> str:
-    limitations = payload.get("limitations") or []
-    sensitivity = payload.get("sensitivity") or []
-    stale = payload.get("stale_indicators") or []
     return (
-        f"  limitations:      {', '.join(limitations) if limitations else 'none'}\n"
-        f"  sensitivity:      {', '.join(sensitivity) if sensitivity else 'none'}\n"
-        f"  stale_indicators: {', '.join(stale) if stale else 'none'}"
+        f"  limitations:      {_join_ids(payload.get('limitations'), empty='none')}\n"
+        f"  sensitivity:      {_join_ids(payload.get('sensitivity'), empty='none')}\n"
+        f"  stale_indicators: {_join_ids(payload.get('stale_indicators'), empty='none')}"
     )
 
 
@@ -156,17 +153,15 @@ def format_governed_summaries(context_items: list[dict[str, Any]]) -> str | None
             return None
         if citation.get("canonical_id") != item.get("canonical_id"):
             return None
-        lim = item.get("limitations") or []
         sens = item.get("sensitivity")
-        stale = item.get("stale_indicators") or []
         blocks.append(
             f"  [{i}] {item.get('canonical_title')}  ({item.get('canonical_id')})\n"
             f"      summary: {summary_text}\n"
             f"      citation: reviewed_summary_id={citation.get('reviewed_summary_id')} "
             f"evidence_ids={_join_ids(citation.get('evidence_ids'))}\n"
-            f"      limitations: {', '.join(lim) if lim else 'none'}\n"
-            f"      sensitivity: {sens or 'none'}\n"
-            f"      stale_indicators: {', '.join(stale) if stale else 'none'}"
+            f"      limitations: {_join_ids(item.get('limitations'), empty='none')}\n"
+            f"      sensitivity: {sens if sens else 'none'}\n"
+            f"      stale_indicators: {_join_ids(item.get('stale_indicators'), empty='none')}"
         )
     return "\n\n".join(blocks)
 
@@ -213,7 +208,7 @@ def render_registry_knowledge_payload(payload: dict[str, Any]) -> dict[str, Any]
         format_disclosures(payload),
         "",
         "SELECTED CANONICAL IDS",
-        f"  {', '.join(selected) if selected else '-'}",
+        f"  {_join_ids(selected)}",
         "",
         "RUNTIME REFERENCE DRY-RUN",
         format_no_write_status(payload),
