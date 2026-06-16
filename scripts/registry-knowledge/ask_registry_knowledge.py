@@ -159,6 +159,11 @@ def ask_registry_knowledge(
             return _error("context_item_missing_reviewed_summary_id", stage="context_items", canonical_id=item.get("canonical_id"))
         if not citation:
             return _error("context_item_missing_citation", stage="context_items", canonical_id=item.get("canonical_id"))
+        # Require a non-empty canonical id on BOTH the item and its citation before
+        # comparing, so a malformed pair that both omit canonical_id is not accepted
+        # via None == None (which would expose a null-canonical binding to consumers).
+        if not item.get("canonical_id") or not citation.get("canonical_id"):
+            return _error("context_item_missing_canonical_id", stage="context_items", canonical_id=item.get("canonical_id"))
         if citation.get("canonical_id") != item.get("canonical_id"):
             return _error("context_item_citation_canonical_mismatch", stage="context_items", canonical_id=item.get("canonical_id"))
         if citation.get("reviewed_summary_id") != reviewed_summary_id:
