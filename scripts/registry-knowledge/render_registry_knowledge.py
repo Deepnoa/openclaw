@@ -53,6 +53,10 @@ def _payload_safety_error(payload: dict[str, Any]) -> dict[str, Any] | None:
     citations = payload.get("citations")
     if not isinstance(citations, list) or not citations:
         return _error("missing_citations")
+    # Each citation must be dict-shaped before any .get() in format_citations.
+    for citation in citations:
+        if not isinstance(citation, dict):
+            return _error("malformed_citation")
 
     if payload.get("non_authoritative") is not True:
         return _error("missing_or_false_non_authoritative")
@@ -78,13 +82,20 @@ def _payload_safety_error(payload: dict[str, Any]) -> dict[str, Any] | None:
     return None
 
 
+def _join_ids(value: Any) -> str:
+    """Join id-list fields safely: coerce each element to str, tolerate non-lists."""
+    if not isinstance(value, list) or not value:
+        return "-"
+    return ", ".join(str(v) for v in value)
+
+
 def format_citations(citations: list[dict[str, Any]]) -> str:
     lines = []
     for i, c in enumerate(citations, 1):
         lines.append(f"  [{i}] {c.get('canonical_title')}  ({c.get('canonical_id')})")
         lines.append(f"      retrieval_enablement_id: {c.get('retrieval_enablement_id')}")
         lines.append(f"      reviewed_summary_id:     {c.get('reviewed_summary_id')}")
-        lines.append(f"      evidence_ids:            {', '.join(c.get('evidence_ids') or []) or '-'}")
+        lines.append(f"      evidence_ids:            {_join_ids(c.get('evidence_ids'))}")
     return "\n".join(lines)
 
 
@@ -152,7 +163,7 @@ def format_governed_summaries(context_items: list[dict[str, Any]]) -> str | None
             f"  [{i}] {item.get('canonical_title')}  ({item.get('canonical_id')})\n"
             f"      summary: {summary_text}\n"
             f"      citation: reviewed_summary_id={citation.get('reviewed_summary_id')} "
-            f"evidence_ids={', '.join(citation.get('evidence_ids') or []) or '-'}\n"
+            f"evidence_ids={_join_ids(citation.get('evidence_ids'))}\n"
             f"      limitations: {', '.join(lim) if lim else 'none'}\n"
             f"      sensitivity: {sens or 'none'}\n"
             f"      stale_indicators: {', '.join(stale) if stale else 'none'}"
