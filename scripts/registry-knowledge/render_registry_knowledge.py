@@ -66,11 +66,13 @@ def _payload_safety_error(payload: dict[str, Any]) -> dict[str, Any] | None:
     if nws.get("executed") is not False or nws.get("write_operations") != 0 or nws.get("runtime_reference_written") is not False:
         return _error("unsafe_no_write_status", no_write_status=nws)
 
-    # Defensive: any forbidden marker truthy anywhere at payload or no-write level.
+    # Defensive: ANY truthy forbidden marker (not just boolean True) implies AI
+    # generation, authority, or mutation -> fail closed. A malformed payload that
+    # encodes a marker as 1 or "true" must not be treated as safe.
     for marker in _FORBIDDEN_TRUE_MARKERS:
-        if payload.get(marker) is True:
+        if payload.get(marker):
             return _error("forbidden_marker_true", marker=marker)
-        if nws.get(marker) is True and marker not in ("executed",):
+        if nws.get(marker) and marker != "executed":
             return _error("forbidden_marker_true", marker=marker, scope="no_write_status")
 
     return None
@@ -122,10 +124,17 @@ def format_governed_summaries(context_items: list[dict[str, Any]]) -> str | None
     for i, item in enumerate(context_items, 1):
         citation = item.get("citation") or {}
         summary_text = item.get("summary")
-        reviewed_summary_id = item.get("reviewed_summary_id") or citation.get("reviewed_summary_id")
+        item_rsid = item.get("reviewed_summary_id")
+        citation_rsid = citation.get("reviewed_summary_id")
         if not isinstance(summary_text, str) or not summary_text:
             return None
-        if not citation or not reviewed_summary_id:
+        # The displayed citation must carry a reviewed_summary_id, and if the
+        # item also carries one the two MUST match — otherwise the rendered
+        # citation would bind the summary to a different (stale/corrupted)
+        # reviewed summary than the item claims.
+        if not citation or not citation_rsid:
+            return None
+        if item_rsid and item_rsid != citation_rsid:
             return None
         if citation.get("canonical_id") != item.get("canonical_id"):
             return None
