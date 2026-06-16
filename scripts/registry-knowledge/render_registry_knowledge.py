@@ -118,11 +118,18 @@ def format_governed_summaries(context_items: list[dict[str, Any]]) -> str | None
     hard rejection, never as a fallback. An empty input list returns None too,
     so a present-but-empty context_items is also rejected rather than masked.
     """
-    if not context_items:
+    # Type-guard the whole structure before any .get(): a present-but-malformed
+    # value (a string, or a list containing a non-dict) must fail closed, never
+    # raise AttributeError and crash the consumer.
+    if not isinstance(context_items, list) or not context_items:
         return None
     blocks = []
     for i, item in enumerate(context_items, 1):
-        citation = item.get("citation") or {}
+        if not isinstance(item, dict):
+            return None
+        citation = item.get("citation")
+        if not isinstance(citation, dict):
+            return None
         summary_text = item.get("summary")
         item_rsid = item.get("reviewed_summary_id")
         citation_rsid = citation.get("reviewed_summary_id")
