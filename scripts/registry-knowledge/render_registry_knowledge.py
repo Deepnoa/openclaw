@@ -53,10 +53,15 @@ def _payload_safety_error(payload: dict[str, Any]) -> dict[str, Any] | None:
     citations = payload.get("citations")
     if not isinstance(citations, list) or not citations:
         return _error("missing_citations")
-    # Each citation must be dict-shaped before any .get() in format_citations.
+    # Each citation must be dict-shaped AND carry the lineage IDs needed for a
+    # usable citation. A dict-shaped but empty citation ({}) would otherwise
+    # render None IDs while still returning ok=True — governed text shown with no
+    # usable canonical / reviewed-summary / enablement binding. Fail closed.
     for citation in citations:
         if not isinstance(citation, dict):
             return _error("malformed_citation")
+        if not citation.get("canonical_id") or not citation.get("reviewed_summary_id") or not citation.get("retrieval_enablement_id"):
+            return _error("citation_missing_ids")
 
     if payload.get("non_authoritative") is not True:
         return _error("missing_or_false_non_authoritative")
@@ -151,7 +156,13 @@ def format_governed_summaries(context_items: list[dict[str, Any]]) -> str | None
             return None
         if item_rsid and item_rsid != citation_rsid:
             return None
-        if citation.get("canonical_id") != item.get("canonical_id"):
+        # Require a non-empty canonical id on BOTH sides before comparing, so a
+        # malformed item+citation that both omit canonical_id is not accepted via
+        # None == None and rendered as "[1] None (None)".
+        item_canonical = item.get("canonical_id")
+        if not item_canonical or not citation.get("canonical_id"):
+            return None
+        if citation.get("canonical_id") != item_canonical:
             return None
         sens = item.get("sensitivity")
         blocks.append(
