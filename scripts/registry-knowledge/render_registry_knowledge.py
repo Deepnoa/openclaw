@@ -157,17 +157,18 @@ def render_registry_knowledge_payload(payload: dict[str, Any]) -> dict[str, Any]
     selected = payload.get("selected_canonical_ids") or []
     context_items = payload.get("context_items")
 
-    # Distinguish "no context_items" (safe placeholder fallback) from
-    # "context_items present but invalid" (hard fail-closed). A corrupted or
-    # stale governed-summary payload must be rejected, never displayed as safe.
-    if context_items:
+    # Distinguish the field being ABSENT (legacy/placeholder is safe) from the
+    # field being PRESENT (must validate, fail-closed). Use an explicit None
+    # check, not truthiness: a present-but-empty list ([]) is still "present"
+    # and must be rejected by format_governed_summaries rather than masked as a
+    # safe placeholder. Any malformed or empty governed payload fails closed.
+    if context_items is None:
+        summary_section = ["SUMMARY", "  (governed answer context — see citations)"]
+    else:
         governed = format_governed_summaries(context_items)
         if governed is None:
             return _error("invalid_governed_context_item")
         summary_section = ["GOVERNED SUMMARY (per canonical, verbatim reviewed-summary text)", governed]
-    else:
-        # context_items absent (None) or legitimately empty -> placeholder.
-        summary_section = ["SUMMARY", "  (governed answer context — see citations)"]
 
     sections = [
         "=" * 64,
