@@ -107,23 +107,28 @@ def format_no_write_status(payload: dict[str, Any]) -> str:
     )
 
 
-def format_governed_summaries(context_items: list[dict[str, Any]]) -> str:
+def format_governed_summaries(context_items: list[dict[str, Any]]) -> str | None:
     """Render one verbatim governed summary section per canonical item.
 
-    Fail-closed at render: an item without an adjacent citation, summary text,
-    or reviewed_summary_id is rejected (returns None signalling unsafe).
+    Fail-closed: returns None (NOT an empty string) if any item is malformed —
+    missing summary text, missing citation / reviewed_summary_id, or a citation
+    that does not match the item's canonical. The caller MUST treat None as a
+    hard rejection, never as a fallback. An empty input list returns None too,
+    so a present-but-empty context_items is also rejected rather than masked.
     """
+    if not context_items:
+        return None
     blocks = []
     for i, item in enumerate(context_items, 1):
         citation = item.get("citation") or {}
         summary_text = item.get("summary")
         reviewed_summary_id = item.get("reviewed_summary_id") or citation.get("reviewed_summary_id")
         if not isinstance(summary_text, str) or not summary_text:
-            return ""  # caller treats empty as fallback/unsafe
+            return None
         if not citation or not reviewed_summary_id:
-            return ""
+            return None
         if citation.get("canonical_id") != item.get("canonical_id"):
-            return ""
+            return None
         lim = item.get("limitations") or []
         sens = item.get("sensitivity")
         stale = item.get("stale_indicators") or []
@@ -150,14 +155,18 @@ def render_registry_knowledge_payload(payload: dict[str, Any]) -> dict[str, Any]
 
     citations = payload.get("citations") or []
     selected = payload.get("selected_canonical_ids") or []
-    context_items = payload.get("context_items") or []
+    context_items = payload.get("context_items")
 
-    # Prefer per-canonical verbatim governed summary text when available;
-    # fall back to the safe placeholder otherwise. No synthesis either way.
-    governed = format_governed_summaries(context_items) if context_items else ""
-    if governed:
+    # Distinguish "no context_items" (safe placeholder fallback) from
+    # "context_items present but invalid" (hard fail-closed). A corrupted or
+    # stale governed-summary payload must be rejected, never displayed as safe.
+    if context_items:
+        governed = format_governed_summaries(context_items)
+        if governed is None:
+            return _error("invalid_governed_context_item")
         summary_section = ["GOVERNED SUMMARY (per canonical, verbatim reviewed-summary text)", governed]
     else:
+        # context_items absent (None) or legitimately empty -> placeholder.
         summary_section = ["SUMMARY", "  (governed answer context — see citations)"]
 
     sections = [
