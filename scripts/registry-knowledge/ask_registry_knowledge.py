@@ -144,9 +144,50 @@ def ask_registry_knowledge(
     sensitivity = sorted({str(item.get("sensitivity")) for item in items if item.get("sensitivity")})
     stale_indicators = sorted({s for item in items for s in (item.get("stale_indicators") or [])})
 
+    # Verbatim, read-only copy of the already-verified governed summary text.
+    # No synthesis, no concatenation, no LLM. Each item keeps its own citation.
+    context_items: list[dict[str, Any]] = []
+    for item in items:
+        citation = item.get("citation") or {}
+        summary_text = item.get("summary")
+        reviewed_summary_id = item.get("reviewed_summary_id")
+        # Fail closed: governed summary must be present, sourced, and citation-bound,
+        # and the citation must match the item's canonical.
+        if not isinstance(summary_text, str) or not summary_text:
+            return _error("context_item_missing_summary", stage="context_items", canonical_id=item.get("canonical_id"))
+        if not reviewed_summary_id:
+            return _error("context_item_missing_reviewed_summary_id", stage="context_items", canonical_id=item.get("canonical_id"))
+        if not citation:
+            return _error("context_item_missing_citation", stage="context_items", canonical_id=item.get("canonical_id"))
+        # Require a non-empty canonical id on BOTH the item and its citation before
+        # comparing, so a malformed pair that both omit canonical_id is not accepted
+        # via None == None (which would expose a null-canonical binding to consumers).
+        if not item.get("canonical_id") or not citation.get("canonical_id"):
+            return _error("context_item_missing_canonical_id", stage="context_items", canonical_id=item.get("canonical_id"))
+        if citation.get("canonical_id") != item.get("canonical_id"):
+            return _error("context_item_citation_canonical_mismatch", stage="context_items", canonical_id=item.get("canonical_id"))
+        if citation.get("reviewed_summary_id") != reviewed_summary_id:
+            return _error("context_item_citation_summary_mismatch", stage="context_items", canonical_id=item.get("canonical_id"))
+        context_items.append({
+            "canonical_id": item.get("canonical_id"),
+            "canonical_title": item.get("canonical_title"),
+            "summary": summary_text,
+            "limitations": item.get("limitations") or [],
+            "sensitivity": item.get("sensitivity"),
+            "stale_indicators": item.get("stale_indicators") or [],
+            "citation": {
+                "canonical_id": citation.get("canonical_id"),
+                "retrieval_enablement_id": citation.get("retrieval_enablement_id"),
+                "retrieval_review_id": citation.get("retrieval_review_id"),
+                "reviewed_summary_id": citation.get("reviewed_summary_id"),
+                "evidence_ids": citation.get("evidence_ids") or [],
+            },
+        })
+
     payload = {
         "question": context.get("question"),
         "summary": summary,
+        "context_items": context_items,
         "selected_canonical_ids": summary.get("selected_canonical_ids"),
         "citations": citations,
         "limitations": limitations,
